@@ -1,0 +1,302 @@
+# yinzifenxi1119 Split / Refactor Progress Log
+
+> This file is for the AI and for technical tracking only, so it is kept in **English only** to avoid any encoding issues on your system.
+
+All functional messages, reports, and user-facing text in the actual Python code remain in Chinese and are **never changed** unless explicitly required.
+
+---
+
+## 2025-11-26 – Baseline and Phase 1
+
+### Phase 0 – Baseline Outputs (original script)
+- Script: `yinzifenxi1119.py` (the **golden** original, never modified).
+- Actions:
+  - Run: `python yinzifenxi1119.py`
+  - Copy all generated TXT/CSV/log files into `baseline_outputs/`
+- Purpose:
+  - `baseline_outputs/` is the reference set used to check that all later refactor steps keep behavior and numeric results identical.
+
+---
+
+### Phase 1 – Logger Extraction (fa_logging.Logger)
+
+#### 1.1 Create split entry script
+- Created `yinzifenxi1119_split.py` as an exact copy of `yinzifenxi1119.py`.
+- Goal:
+  - All refactor experiments happen in `yinzifenxi1119_split.py` and under `daima/`.
+  - `yinzifenxi1119.py` remains untouched and is still used for “official” runs.
+
+#### 1.2 Create dedicated logging module
+- New file: `daima/fa_logging.py`
+- Implemented class `Logger` with behavior identical to the original inline `Logger`:
+  - Creates `因子分析日志_YYYYMMDD_HHMMSS.txt`
+  - Writes a header line with timestamp and separators
+  - `write()` prints to both terminal and log file
+  - `close()` writes a “log end” footer and restores `sys.stdout`
+- At this point the split script still used its own local `Logger`, the module was just prepared.
+
+#### 1.3 Wire split script to external Logger
+- In `yinzifenxi1119_split.py`:
+  - Added:
+    ```python
+    from daima.fa_logging import Logger as ExternalLogger
+    ```
+  - Switched `main()` to use:
+    ```python
+    logger = ExternalLogger()
+    ```
+  - (The old inline `class Logger` remained in the file but stopped being used.)
+
+#### 1.4 Phase 1 verification
+- Runs and outputs:
+  - Ran `python yinzifenxi1119_split.py` and copied outputs to:
+    - `stage1_logger_outputs/` (before switching to ExternalLogger)
+    - `stage2_logger_outputs/` (after switching to ExternalLogger)
+- Comparison vs `baseline_outputs/`:
+  - All CSV files: byte-identical (same SHA256)
+  - TXT reports and log files: differ only due to timestamps and run-time metadata, which is expected.
+- Conclusion:
+  - Extracting `Logger` into `fa_logging.Logger` and switching the split script to use it did **not** change any numeric results or CSV contents.
+
+---
+
+## 2025-11-26 – Phase 2: Statistical Utilities (fa_stat_utils)
+
+### 2.1 Create fa_stat_utils with type-safety helpers
+- New file: `daima/fa_stat_utils.py`
+- Implemented (copied from original script):
+  - `ensure_list`
+  - `safe_len`
+  - `safe_ensure_list`
+- In `yinzifenxi1119_split.py`:
+  - Added:
+    ```python
+    from daima.fa_stat_utils import ensure_list, safe_len, safe_ensure_list
+    ```
+  - For now, the original definitions remain in the split script to avoid any behavior change. The module is prepared for future use.
+
+### 2.2 Move robustness and FDR helpers into fa_stat_utils (implementation only)
+- In `daima/fa_stat_utils.py`:
+  - Added placeholder versions (matching the “external helper removed” stubs in the script):
+    - `kendall_tau_corr`, `robust_correlation`, `mann_whitney_u_test`
+    - `bootstrap_confidence_interval`, `detect_outliers`, `sensitivity_analysis`
+    - `false_discovery_control`, `rolling_window_analysis`
+    - `temporal_stability_analysis`, `sample_sensitivity_analysis`
+  - Added full implementation versions (with `_impl` suffix), copied from the rich implementations in the split script:
+    - `kendall_tau_corr_impl`
+    - `robust_correlation_impl`
+    - `mann_whitney_u_test_impl`
+    - `bootstrap_confidence_interval_impl`
+    - `detect_outliers_impl`
+    - `sensitivity_analysis_impl`
+    - `false_discovery_control_impl`
+- At this point:
+  - The split script still uses its own internal implementations.
+  - The `_impl` versions in `fa_stat_utils` are ready for gradual, controlled replacement.
+
+### 2.3 Switch custom_spearman_corr to module implementation
+- Chosen function: `custom_spearman_corr` (used in IC and robustness calculations).
+- Steps:
+  1. In `daima/fa_stat_utils.py`:
+     - Added full implementation:
+       ```python
+       def custom_spearman_corr(x, y):
+           ...
+       ```
+       copied from the original script.
+  2. In `yinzifenxi1119_split.py`:
+     - Added import:
+       ```python
+       from daima.fa_stat_utils import false_discovery_control_impl, custom_spearman_corr
+       ```
+     - Removed the local `custom_spearman_corr` function definition.
+     - All calls to `custom_spearman_corr(...)` in the split script now use `fa_stat_utils.custom_spearman_corr`.
+
+#### 2.3.1 Verification for custom_spearman_corr
+- Run:
+  - `python yinzifenxi1119_split.py`
+  - Copy outputs to `stage_custom_spearman_outputs/`
+- Compare vs `baseline_outputs/`:
+  - CSV files (all factor/decile details and summary CSVs):
+    - All pairs are byte-identical (same SHA256 hash).
+  - TXT reports and logs:
+    - Hashes differ due to timestamps / run-time metadata only (expected).
+- Conclusion:
+  - Switching `custom_spearman_corr` to the implementation in `fa_stat_utils` preserves all numeric behavior and CSV outputs exactly.
+
+---
+
+## 2025-11-26 – Phase 3: Prepare Non‑parametric Analysis Modules
+
+### 3.1 Create fa_nonparam_analysis.py (passive copy of FactorAnalysis)
+- New file: `daima/fa_nonparam_analysis.py`
+- Contents:
+  - English header explaining this is a non‑parametric factor analysis module,
+    currently a passive copy.
+  - Imports:
+    ```python
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime
+    ```
+  - A verbatim copy of `class FactorAnalysis` taken from `yinzifenxi1119_split.py`.
+- Important:
+  - This module is **not yet wired** into the main workflow.
+  - The active `FactorAnalysis` used by the program is still the one defined
+    inside `yinzifenxi1119_split.py`.
+  - Therefore, creating this file does **not** change any behavior or outputs.
+
+### 3.2 Create fa_nonparam_report.py (placeholder for future report code)
+- New file: `daima/fa_nonparam_report.py`
+- Contents:
+  - English header describing it as a future home for non‑parametric factor
+    analysis report generation.
+  - A note that it is not yet used by the main workflow.
+- Purpose:
+  - Provide a clear place to move `FactorAnalysis` report methods into
+    (e.g. `generate_summary_report`, `generate_factor_analysis_report`, etc.)
+    in later steps.
+
+### 3.3 Add thin report wrappers (not yet used)
+- Updated `daima/fa_nonparam_report.py` to add thin wrapper functions:
+  - `_fa_generate_summary_report(self)`
+  - `_fa_generate_factor_analysis_report(self, ...)`
+  - `_fa_generate_positive_factors_analysis(self)`
+  - `_fa_generate_negative_factors_analysis(self)`
+- Current behavior:
+  - Each wrapper simply delegates to the existing methods on `self`, e.g.:
+    - `_fa_generate_summary_report(self)` calls `self.generate_summary_report()`.
+  - These wrappers are not yet imported or used by `yinzifenxi1119_split.py`.
+  - No logic has been changed; this is only preparing a clean separation layer
+    for future refactors.
+
+### 3.3 Status after Phase 3 preparation
+- All changes in Phase 3 so far:
+  - Only **add new modules** under `daima/`.
+  - No changes to `yinzifenxi1119.py` or the active logic in
+    `yinzifenxi1119_split.py`.
+- Behavior check:
+  - Running `python yinzifenxi1119.py` or `python yinzifenxi1119_split.py`
+    still uses the original in‑script `FactorAnalysis` implementation.
+  - No need for a new CSV/TXT comparison at this step, because the new modules
+    are not yet imported or used.
+
+---
+
+## Notes / Guidelines Going Forward
+
+- `yinzifenxi1119.py` remains the **golden reference**:
+  - Only used for official runs and baseline generation.
+  - Never modified during refactor/split work.
+
+- All refactor work happens in:
+  - `yinzifenxi1119_split.py`
+  - `daima/fa_*.py` modules
+
+- When switching any function from inline implementation to a module implementation:
+  1. Copy the original implementation into a module (e.g. `fa_stat_utils`) verbatim.
+  2. Update the split script to import and call the module function.
+  3. Run `yinzifenxi1119_split.py`, capture outputs to `stageX_*_outputs/`.
+  4. Compare all CSVs (and, if needed, logs and TXT reports) against `baseline_outputs/`.
+  5. Only proceed if CSVs are byte-identical and differences in TXT/log files are explained by timestamps.
+
+
+## 2025-11-26 ? Phase 3.4: Wire non-parametric report wrappers (no behavior change)
+
+- Updated `yinzifenxi1119_split.py` to import non-parametric report helper functions:
+  - `from daima.fa_nonparam_report import (_fa_generate_summary_report, _fa_generate_factor_analysis_report)`.
+- In the main analysis flow (non-parameterized run), replaced direct method calls:
+  - `summary_df = analyzer.generate_summary_report()`
+  - `analyzer.generate_factor_analysis_report(summary_df, process_factors=..., factor_method=..., winsorize=...)`
+  with calls that go through the wrapper functions:
+  - `summary_df = _fa_generate_summary_report(analyzer)`
+  - `_fa_generate_factor_analysis_report(analyzer, summary_df, process_factors=..., factor_method=..., winsorize=...)`.
+- The wrapper functions themselves are thin delegates that call the original methods on the analyzer instance, so all report text, CSV contents, and numeric calculations remain unchanged.
+- Verification run:
+  - Script: `python yinzifenxi1119_split.py`
+  - Outputs copied to: `stage_nonparam_report_wrappers/`
+  - CSV comparison vs `baseline_outputs/`:
+    - All 9 CSV files are byte-identical (same SHA256 hashes), including:
+      - `??????_*.csv`
+      - All `?????????_*.csv` and `?????????_*.csv` files.
+  - TXT/log files differ only in timestamps and run-time metadata (expected).
+- Conclusion:
+  - Wiring the non-parametric report wrappers did not change any numeric results or CSV/TXT contents, satisfying the strict equivalence requirement.
+
+
+## 2025-11-26 ? Phase 3.5: Copy FactorAnalysis report implementations into fa_nonparam_report
+
+- Used an automated AST-based script to extract the bodies of `FactorAnalysis.generate_summary_report`,
+  `generate_factor_analysis_report`, `generate_positive_factors_analysis`, and `generate_negative_factors_analysis`
+  from `yinzifenxi1119_split.py` without touching their definitions in the class.
+- Rebuilt the `_fa_*` helper functions inside `daima/fa_nonparam_report.py` so they now contain the original
+  implementations (docstrings + logic) and added the necessary imports (`numpy`, `pandas`, `datetime`).
+  No edits were made to the golden script, and the FactorAnalysis class still keeps its own methods.
+- Verification run:
+  - Command: `python yinzifenxi1119_split.py`
+  - Outputs archived in `stage_nonparam_report_impl/`
+  - All CSV files match `baseline_outputs/` byte-for-byte (SHA256 identical).
+  - TXT/log files naturally differ in timestamps only.
+- Status: Report logic is now duplicated in the helper module, ready for future wiring steps while keeping
+  current behavior unchanged.
+
+
+## 2025-11-26 ? Phase 3.6: Wire FactorAnalysis report methods to fa_nonparam_report
+
+- Updated `yinzifenxi1119_split.py` to import `_fa_generate_positive_factors_analysis` / `_fa_generate_negative_factors_analysis`.
+- Replaced the bodies of `FactorAnalysis.generate_summary_report`, `generate_factor_analysis_report`,
+  `generate_positive_factors_analysis`, and `generate_negative_factors_analysis` with thin wrappers that delegate to the
+  respective helper functions in `daima/fa_nonparam_report.py`. The class API remains unchanged, but the actual logic now
+  lives in the module, eliminating duplication.
+- Verification run:
+  - Command: `python yinzifenxi1119_split.py`
+  - Outputs archived in `stage_nonparam_report_wiring/`
+  - All CSV files match `baseline_outputs/` byte-for-byte (SHA256 identical); TXT/???????????
+- ??????????????? `fa_nonparam_report.py` ???`FactorAnalysis` ??????????????????????????????????
+
+
+## 2025-11-26 ? Phase 3.7: Prepare fa_nonparam_analysis for real usage
+
+- Added the missing configuration/statistics imports inside `daima/fa_nonparam_analysis.py`:
+  - `DEFAULT_DATA_FILE` now comes from `daima.fa_config`.
+  - All helper functions (`ensure_list`, `custom_spearman_corr`, `robust_correlation_impl`, `mann_whitney_u_test_impl`,
+    `bootstrap_confidence_interval_impl`, `kendall_tau_corr_impl`) are imported from `daima.fa_stat_utils` and aliased so
+    the class can call them directly.
+  - Added local detection for matplotlib/scipy to provide `HAS_PLOT`, `HAS_SCIPY`, and fallbacks when these packages are
+    unavailable, matching the logic in the split script.
+- Although the main script has not switched to this module yet, the file is now self-contained and ready for future
+  wiring (no longer depends on globals defined in `yinzifenxi1119_split.py`).
+- Verification run:
+  - Command: `python yinzifenxi1119_split.py`
+  - Outputs stored in `stage_nonparam_analysis_imports/`
+  - All CSVs remain byte-identical to `baseline_outputs/`; TXT/?????????
+
+
+## 2025-11-26 ? Phase 3.7: Extract classification helpers
+
+- Added a new helper module `daima/fa_nonparam_helpers.py` that now hosts `_fa_classify_factors_by_ic`,
+  `_fa_generate_factor_classification_overview`, and `_fa_get_suggested_weight` (verbatim copies of the
+  original implementations) so they can be reused independently of the inline `FactorAnalysis` class.
+- Updated `yinzifenxi1119_split.py` to import these helpers and rewired `FactorAnalysis.classify_factors_by_ic`,
+  `generate_factor_classification_overview`, `_get_suggested_weight` as thin wrappers that delegate to the
+  helper module (consistent with the report method refactors).
+- Verification run:
+  - Command: `python yinzifenxi1119_split.py`
+  - Outputs archived in `stage_nonparam_helpers/`
+  - All CSV files remain byte-identical to `baseline_outputs/`; TXT/??????????
+- ?????? split ????????????????????? `daima` ??????
+
+
+## 2025-11-26 – Phase 3.8: Helper delegation for scoring/overview
+
+- Added `_fa_get_scoring_standards` to `daima/fa_nonparam_helpers.py` so the lengthy scoring guideline text no longer
+  lives inside the `FactorAnalysis` class.
+- Updated `FactorAnalysis` inside `yinzifenxi1119_split.py` to delegate the remaining inline helper logic to the module:
+  - `_get_suggested_weight`, `_get_scoring_standards`, `classify_factors_by_ic`, and
+    `generate_factor_classification_overview` now call the `_fa_*` helpers.
+  - This removes the last large blobs of duplicated classification/scoring text from the class definition itself.
+- Created a new stage folder `stage_nonparam_helpers_delegation/`, ran `python yinzifenxi1119_split.py`, and moved all
+  generated outputs (`*20251126_1725*.csv/txt`) into that folder for auditing.
+- Used a PowerShell hash comparison script to check every CSV under the new stage folder against the counterparts in
+  `baseline_outputs/`; all CSV hashes are identical. TXT/log files (`因子分析日志_*`, `因子分析详情_精简版_*`,
+  `带参数因子综合分析报告_*`) naturally differ because of embedded timestamps and run metadata, which is expected.
