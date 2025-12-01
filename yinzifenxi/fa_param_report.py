@@ -92,15 +92,18 @@ def _fa_generate_parameterized_report(self):
     )
     builder.add_section("整体概览", overview_cards)
 
-    ranking_columns = ['排名', '因子名称', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普比率', '最大回撤']
-    ranking_headers = ['排名', '因子', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普', '最大回撤']
+    ranking_columns = ['排名', '因子名称', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普比率', '平均每笔收益率', '最大回撤', '交易日数量', '样本数量']
+    ranking_headers = ['排名', '因子', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普', '平均每笔交易收益率', '最大回撤', '交易日数量', '样本数量']
     ranking_formatters = {
         '排名': lambda x: str(int(x)),
         '综合得分': _fmt_score,
         '相邻平滑后得分': _fmt_score,
-        '年化收益率': lambda x: _fmt_float(x, 3),
+        '年化收益率': lambda x: _fmt_percent(x, 2),
         '年化夏普比率': _fmt_float,
+        '平均每笔收益率': lambda x: _fmt_percent(x, 2),
         '最大回撤': lambda x: _fmt_percent(x, 1),
+        '交易日数量': lambda x: str(int(x)) if pd.notna(x) else "--",
+        '样本数量': lambda x: str(int(x)) if pd.notna(x) else "--",
     }
 
     def _wrap_subcard(title, description, inner_html):
@@ -111,7 +114,7 @@ def _fa_generate_parameterized_report(self):
         if df.empty:
             return render_alert(empty_text, level="warn")
         ordered_df = df.sort_values('综合得分', ascending=False).reset_index().rename(columns={'index': '__orig_index'})
-        ranking_df = ordered_df[['因子名称', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普比率', '最大回撤']].copy()
+        ranking_df = ordered_df[['因子名称', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普比率', '平均每笔收益率', '最大回撤', '交易日数量', '样本数量']].copy()
         ranking_df.insert(0, '排名', range(1, len(ranking_df) + 1))
         cell_classes = {}
         if apply_positive_highlight:
@@ -122,10 +125,13 @@ def _fa_generate_parameterized_report(self):
                 orig_idx = row['__orig_index']
                 if smoothed_rank.loc[orig_idx] > 10:
                     cell_classes.setdefault(pos, {})['相邻平滑后得分'] = 'highlight-alert'
-            metric_cols = ['年化收益率', '年化夏普比率', '最大回撤']
+            metric_cols = ['年化收益率', '年化夏普比率', '平均每笔收益率', '最大回撤']
             for col in metric_cols:
                 values = pd.to_numeric(ordered_df[col], errors='coerce')
-                top_positions = values.nlargest(3).index
+                if col == '最大回撤':
+                    top_positions = values.nsmallest(3).index
+                else:
+                    top_positions = values.nlargest(3).index
                 for pos_idx in top_positions:
                     cell_classes.setdefault(pos_idx, {})[col] = 'highlight-blue'
         for pos in range(min(10, len(ordered_df))):
@@ -158,10 +164,13 @@ def _fa_generate_parameterized_report(self):
         items_html = []
         for i, (_, factor) in enumerate(frame.iterrows(), 1):
             stats = [
-                f"年化收益率：{_fmt_float(factor['年化收益率'], 3)}",
+                f"年化收益率：{_fmt_percent(factor['年化收益率'], 2)}",
                 f"年化夏普比率：{_fmt_float(factor['年化夏普比率'], 3)}",
                 f"年化收益标准差：{_fmt_float(factor['年化收益标准差'], 3)}",
+                f"平均每笔收益率：{_fmt_percent(factor.get('平均每笔收益率'), 2)}",
                 f"最大回撤：{_fmt_percent(factor['最大回撤'], 1)}",
+                f"交易日数量：{int(factor['交易日数量']) if pd.notna(factor['交易日数量']) else '--'}",
+                f"样本数量：{int(factor['样本数量']) if pd.notna(factor['样本数量']) else '--'}",
             ]
             items_html.append(
                 f"<li><strong>第{i}名：{escape(factor['因子名称'])} | {escape(factor['参数区间'])}</strong>"
@@ -186,10 +195,13 @@ def _fa_generate_parameterized_report(self):
             rating = "C级（较差）"
         direction_tag = "tag-positive" if factor_row['因子方向'] == '正向' else "tag-negative"
         metric_items = [
-            f"年化收益率：{_fmt_float(factor_row['年化收益率'], 3)}",
+            f"年化收益率：{_fmt_percent(factor_row['年化收益率'], 1)}",
             f"年化收益标准差：{_fmt_float(factor_row['年化收益标准差'], 3)}",
             f"年化夏普比率：{_fmt_float(factor_row['年化夏普比率'], 3)}",
+            f"平均每笔收益率：{_fmt_percent(factor_row.get('平均每笔收益率'), 1)}",
             f"最大回撤：{_fmt_percent(factor_row['最大回撤'], 1)}",
+            f"交易日数量：{int(factor_row['交易日数量']) if pd.notna(factor_row.get('交易日数量')) else '--'}",
+            f"样本数量：{int(factor_row['样本数量']) if pd.notna(factor_row.get('样本数量')) else '--'}",
         ]
         group_html = ""
         factor_name = factor_row['因子名称']
@@ -200,13 +212,33 @@ def _fa_generate_parameterized_report(self):
             if len(group_data) > 0:
                 group = group_data.iloc[0]
                 group_items = [
-                    f"平均收益：{_fmt_float(group['平均收益'], 3)}",
+                    f"平均收益：{_fmt_percent(group['平均收益'], 1)}",
                     f"收益标准差：{_fmt_float(group['收益标准差'], 3)}",
                     f"最大回撤：{_fmt_percent(group['最大回撤'], 1)}",
-                    f"年化收益率：{_fmt_float(group['年化收益率'], 3)}",
+                    f"年化收益率：{_fmt_percent(group['年化收益率'], 1)}",
                     f"年化收益标准差：{_fmt_float(group['年化收益标准差'], 3)}",
                     f"年化夏普比率：{_fmt_float(group['年化夏普比率'], 3)}",
                 ]
+                if '年化索提诺比率' in group and pd.notna(group['年化索提诺比率']):
+                    group_items.append(f"年化索提诺比率：{_fmt_float(group['年化索提诺比率'], 3)}")
+                if '日度收益均值' in group and pd.notna(group['日度收益均值']):
+                    group_items.append(f"日度收益均值：{_fmt_percent(group['日度收益均值'], 1)}")
+                if '日度收益波动' in group and pd.notna(group['日度收益波动']):
+                    group_items.append(f"日度收益波动：{_fmt_float(group['日度收益波动'], 3)}")
+                if '交易日数量' in group and pd.notna(group['交易日数量']):
+                    trade_days_val = int(group['交易日数量'])
+                    group_items.append(f"交易日数量：{trade_days_val}")
+                if '样本数量' in group and pd.notna(group['样本数量']):
+                    group_items.append(f"样本数量：{int(group['样本数量'])}")
+                if '观测区间' in group and isinstance(group['观测区间'], str) and group['观测区间']:
+                    group_items.append(f"观察区间：{group['观测区间']}")
+                if '观测期年数' in group and pd.notna(group['观测期年数']):
+                    group_items.append(f"观测期（年）：{_fmt_float(group['观测期年数'], 3)}")
+                if '年化收益估算方式' in group and isinstance(group['年化收益估算方式'], str):
+                    group_items.append(f"年化估算方式：{group['年化收益估算方式']}")
+                sample_hint = group.get('年化样本提示')
+                if isinstance(sample_hint, str) and sample_hint.strip():
+                    group_items.append(f"样本提示：{sample_hint.strip()}")
                 group_html = f"<div class='sub-block'><h4>分组详细数据</h4>{render_list(group_items)}</div>"
 
         detail_cards.append(

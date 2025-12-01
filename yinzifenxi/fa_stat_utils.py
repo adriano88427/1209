@@ -4,6 +4,7 @@
 # 当前阶段：仅抽取并复刻 yinzifenxi1119.py 中的通用函数实现，不修改原脚本调用逻辑。
 
 import numpy as np
+import pandas as pd
 import scipy
 
 
@@ -209,6 +210,41 @@ def sample_sensitivity_analysis(df, factor_col, return_col,
         sample_sizes=sample_sizes,
         n_iterations=n_iterations,
     )
+
+
+def calc_max_drawdown(return_series, clip_lower=-0.99):
+    """
+    计算最大回撤（返回非负数值，代表跌幅绝对值）。
+
+    Args:
+        return_series (array-like): 按时间排序的收益序列（单利）。
+        clip_lower (float): 最低收益截断，防止 -100% 导致资金曲线为0。
+    """
+    if return_series is None:
+        return np.nan
+
+    try:
+        series = pd.Series(return_series).dropna().astype(float)
+    except Exception:
+        try:
+            series = pd.Series(return_series).dropna()
+            series = pd.to_numeric(series, errors='coerce').dropna()
+        except Exception:
+            return np.nan
+
+    if series.empty:
+        return np.nan
+
+    if clip_lower is not None:
+        series = series.clip(lower=clip_lower)
+
+    cumulative = np.cumprod(1 + series.to_numpy())
+    if cumulative.size == 0:
+        return np.nan
+
+    peaks = np.maximum.accumulate(cumulative)
+    drawdowns = 1 - (cumulative / peaks)
+    return float(np.max(drawdowns)) if drawdowns.size else np.nan
 
 
 # 下面是真正带实现的版本，从拆分脚本原样复制过来（当前不在主流程中直接调用）

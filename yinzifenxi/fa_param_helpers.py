@@ -34,7 +34,7 @@ def _fa_score_parameterized_factors(factor_results):
             if pd.notna(group['年化收益标准差']):
                 metric_samples['std'].append(float(group['年化收益标准差']))
             if pd.notna(group['最大回撤']):
-                metric_samples['drawdown'].append(abs(float(group['最大回撤'])))
+                metric_samples['drawdown'].append(float(group['最大回撤']))
 
     def _score_linear(value, best, worst, higher_better=True):
         if value is None or pd.isna(value):
@@ -96,7 +96,7 @@ def _fa_score_parameterized_factors(factor_results):
             return_score = _score_linear(ann_return, *bounds['return'], higher_better=True)
             sharpe_score = _score_linear(sharpe_ratio, *bounds['sharpe'], higher_better=True)
             std_score = _score_linear(ann_std, *bounds['std'], higher_better=False)
-            drawdown_value = abs(max_drawdown) if max_drawdown is not None else None
+            drawdown_value = float(max_drawdown) if max_drawdown is not None else None
             drawdown_score = _score_linear(drawdown_value, *bounds['drawdown'], higher_better=False)
 
             total_score = (
@@ -113,6 +113,9 @@ def _fa_score_parameterized_factors(factor_results):
                 '区间序号': group.get('分组'),
                 '胜率': win_rate,
                 '最大回撤': max_drawdown,
+                '平均每笔收益率': group.get('平均收益'),
+                '交易日数量': group.get('交易日数量'),
+                '样本数量': group.get('样本数量'),
                 '年化收益率': ann_return,
                 '年化收益标准差': ann_std,
                 '年化夏普比率': sharpe_ratio,

@@ -23,6 +23,10 @@ os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
 DEFAULT_DATA_FILES = [
    
     os.path.join(DATA_TABLE_DIR, "回测详细数据结合股本分析：创业板2025.xlsx"),
+    os.path.join(DATA_TABLE_DIR, "回测详细数据结合股本分析：创业板2024.xlsx"),
+    os.path.join(DATA_TABLE_DIR, "回测详细数据结合股本分析：创业板2023.xlsx"),
+    os.path.join(DATA_TABLE_DIR, "回测详细数据结合股本分析：创业板2022.xlsx"),
+    os.path.join(DATA_TABLE_DIR, "回测详细数据结合股本分析：创业板2021.xlsx"),
 ]
 # 为保持兼容性，保留单文件常量（默认取列表中的第一个）
 DEFAULT_DATA_FILE = DEFAULT_DATA_FILES[0] if DEFAULT_DATA_FILES else ""
