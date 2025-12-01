@@ -92,8 +92,34 @@ def _fa_generate_parameterized_report(self):
     )
     builder.add_section("整体概览", overview_cards)
 
-    ranking_columns = ['排名', '因子名称', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普比率', '平均每笔收益率', '最大回撤', '交易日数量', '样本数量']
-    ranking_headers = ['排名', '因子', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普', '平均每笔交易收益率', '最大回撤', '交易日数量', '样本数量']
+    ranking_columns = [
+        '排名',
+        '因子名称',
+        '参数区间',
+        '综合得分',
+        '相邻平滑后得分',
+        '年化收益率',
+        '年化夏普比率',
+        '平均每笔收益率',
+        '最大回撤',
+        '交易日数量',
+        '样本数量',
+        '数据年份',
+    ]
+    ranking_headers = [
+        '排名',
+        '因子',
+        '参数区间',
+        '综合得分',
+        '相邻平滑后得分',
+        '年化收益率',
+        '年化夏普',
+        '平均每笔交易收益率',
+        '最大回撤',
+        '交易日数量',
+        '样本数量',
+        '数据年份',
+    ]
     ranking_formatters = {
         '排名': lambda x: str(int(x)),
         '综合得分': _fmt_score,
@@ -104,6 +130,7 @@ def _fa_generate_parameterized_report(self):
         '最大回撤': lambda x: _fmt_percent(x, 1),
         '交易日数量': lambda x: str(int(x)) if pd.notna(x) else "--",
         '样本数量': lambda x: str(int(x)) if pd.notna(x) else "--",
+        '数据年份': lambda x: str(x) if pd.notna(x) else "--",
     }
 
     def _wrap_subcard(title, description, inner_html):
@@ -114,7 +141,21 @@ def _fa_generate_parameterized_report(self):
         if df.empty:
             return render_alert(empty_text, level="warn")
         ordered_df = df.sort_values('综合得分', ascending=False).reset_index().rename(columns={'index': '__orig_index'})
-        ranking_df = ordered_df[['因子名称', '参数区间', '综合得分', '相邻平滑后得分', '年化收益率', '年化夏普比率', '平均每笔收益率', '最大回撤', '交易日数量', '样本数量']].copy()
+        ranking_df = ordered_df[
+            [
+                '因子名称',
+                '参数区间',
+                '综合得分',
+                '相邻平滑后得分',
+                '年化收益率',
+                '年化夏普比率',
+                '平均每笔收益率',
+                '最大回撤',
+                '交易日数量',
+                '样本数量',
+                '数据年份',
+            ]
+        ].copy()
         ranking_df.insert(0, '排名', range(1, len(ranking_df) + 1))
         cell_classes = {}
         if apply_positive_highlight:

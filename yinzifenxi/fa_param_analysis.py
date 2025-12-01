@@ -186,7 +186,7 @@ class ParameterizedFactorAnalyzer:
             
             # 删除缺失值
             original_len = len(df)
-            df = df.dropna(subset=[self.return_col] + self.factors)
+            df = df.dropna(subset=[self.return_col])
             print(f"数据预处理完成，分析使用 {len(df)} 行有效数据 (删除了 {original_len - len(df)} 行缺失值)")
             
             self.processed_data = df
@@ -296,7 +296,11 @@ class ParameterizedFactorAnalyzer:
                 factor_values = group_data[factor_col]
                 min_val = factor_values.min()
                 max_val = factor_values.max()
-                param_range = f"[{min_val:.3f}, {max_val:.3f}]"
+                abs_bound = max(abs(min_val), abs(max_val))
+                if abs_bound <= 2:
+                    param_range = f"[{min_val * 100:.2f}%, {max_val * 100:.2f}%]"
+                else:
+                    param_range = f"[{min_val:.3f}, {max_val:.3f}]"
                 
                 # 计算该组的收益统计
                 returns = group_data[self.return_col]
@@ -311,6 +315,7 @@ class ParameterizedFactorAnalyzer:
                 end_date = None
                 used_daily_aggregation = False
                 drawdown_series = returns
+                year_label = "--"
                 if has_signal_date and group_data['信号日期'].notna().any():
                     dated_group = group_data.dropna(subset=['信号日期'])
                     if not dated_group.empty:
@@ -318,6 +323,24 @@ class ParameterizedFactorAnalyzer:
                         end_date = dated_group['信号日期'].max()
                         if pd.notna(start_date) and pd.notna(end_date):
                             date_span = f"{start_date.date()}~{end_date.date()}"
+                        year_values = (
+                            dated_group['信号日期']
+                            .dropna()
+                            .dt.year
+                            .dropna()
+                            .astype(int)
+                            .tolist()
+                        )
+                        if year_values:
+                            unique_years = sorted(set(year_values))
+                            if len(unique_years) == 1:
+                                year_label = str(unique_years[0])
+                            else:
+                                is_contiguous = unique_years == list(range(unique_years[0], unique_years[-1] + 1))
+                                if is_contiguous:
+                                    year_label = f"{unique_years[0]}-{unique_years[-1]}"
+                                else:
+                                    year_label = "、".join(str(y) for y in unique_years)
                         daily_returns = (
                             dated_group.groupby('信号日期')[self.return_col]
                             .mean()
@@ -412,6 +435,7 @@ class ParameterizedFactorAnalyzer:
                     '胜率': win_rate,
                     '最大回撤': max_drawdown,
                     '交易日数量': trade_days,
+                    '数据年份': year_label,
                     '观察区间': date_span,
                     '日度收益均值': daily_mean,
                     '日度收益波动': daily_std,

@@ -6,6 +6,7 @@
 """
 
 import os
+import re
 import numpy as np
 import pandas as pd
 import scipy
@@ -13,6 +14,7 @@ from datetime import datetime
 from typing import Sequence
 
 from .excel_parser import load_excel_sources, DEFAULT_PARSE_CONFIG
+from .fa_data_validator import DataValidator
 from .fa_config import (
     DEFAULT_DATA_FILE,
     DEFAULT_DATA_FILES,
@@ -365,8 +367,11 @@ class FactorAnalysis:
         self.loaded_sources = [
             {
                 'path': diag.file_path,
+                'file_name': os.path.basename(diag.file_path),
                 'columns': set(diag.present_columns),
                 'sheet': diag.sheet_name,
+                'rows': getattr(diag, 'rows', 0) or 0,
+                'year': self._infer_year_from_name(diag.file_path),
             }
             for diag in self.parse_diagnostics
         ]
@@ -382,6 +387,134 @@ class FactorAnalysis:
                 + ", ".join(sorted(self.unavailable_factors))
             )
         return True
+
+    def validate_data_sources(self):
+        """
+        在预处理之前执行数据完整性验证，确保所有表格均成功读取并覆盖预期年份。
+        """
+        validator = DataValidator(
+            self.file_paths,
+            getattr(self, "parse_diagnostics", []),
+            self.data,
+            required_columns=[self.return_col, *self.factors],
+        )
+        result = validator.run()
+        for line in result.report_lines:
+            print(line)
+        return result.passed
+
+    def _infer_year_from_name(self, path):
+        try:
+            filename = os.path.basename(path or "")
+        except Exception:
+            filename = str(path)
+        match = re.search(r"(20\d{2})", filename)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+        return None
+
+    def validate_processed_coverage(self, min_years=5, min_trading_days=800):
+        """
+        预处理后再次校验样本覆盖范围，防止因缺失值导致仅剩单一年度。
+        """
+        lines = ["\n[VALIDATION] === 样本覆盖复核 ==="]
+        df = getattr(self, 'processed_data', None)
+        if df is None or df.empty:
+            lines.append("  - 预处理结果为空，无法继续分析")
+            for line in lines:
+                print(line)
+            return False
+
+        if '信号日期' not in df.columns:
+            lines.append("  - 缺少信号日期列，无法评估样本覆盖")
+            for line in lines:
+                print(line)
+            return False
+
+        valid_dates = pd.to_datetime(df['信号日期'], errors='coerce').dropna()
+        year_counts = valid_dates.dt.year.dropna().value_counts().sort_index()
+        unique_years = list(year_counts.index)
+        unique_days = int(valid_dates.dt.normalize().nunique())
+        lines.append(
+            f"  - 预处理后覆盖年份: {', '.join(str(y) for y in unique_years) if unique_years else '无'}"
+            f" (共 {len(unique_years)} 年)，覆盖交易日 {unique_days} 天"
+        )
+
+        factor_alerts = []
+        for factor in self.factors:
+            factor_df = df[['信号日期', factor]].dropna()
+            if factor_df.empty:
+                factor_alerts.append({
+                    'factor': factor,
+                    'message': "无有效样本",
+                    'missing_years': unique_years,
+                    'factor_years': [],
+                })
+                continue
+            factor_years = sorted(pd.to_datetime(factor_df['信号日期'], errors='coerce').dropna().dt.year.unique())
+            if len(factor_years) < min_years:
+                missing_years = sorted(set(unique_years) - set(factor_years))
+                factor_alerts.append({
+                    'factor': factor,
+                    'message': f"仅覆盖 {len(factor_years)} 年",
+                    'missing_years': missing_years,
+                    'factor_years': factor_years,
+                })
+
+        total_source_rows = sum(src.get('rows', 0) for src in getattr(self, 'loaded_sources', [])) or len(self.data) or 1
+
+        for alert in factor_alerts:
+            factor = alert['factor']
+            missing_years = alert.get('missing_years', [])
+            factor_years = alert.get('factor_years', [])
+            lines.append(
+                f"    · 因子 {factor}: 已覆盖年份 {', '.join(str(y) for y in factor_years) if factor_years else '无'}，"
+                f"缺失年份 {', '.join(str(y) for y in missing_years) if missing_years else '未知'}（{alert.get('message')}）"
+            )
+            for year in missing_years:
+                year_sample = year_counts.get(year, 0)
+                year_share = (year_sample / len(df)) if len(df) else 0
+                lines.append(
+                    f"      - 年度 {year}: 预处理样本 {year_sample} 行，占全量 {year_share:.1%}"
+                )
+                sources = [
+                    src for src in getattr(self, 'loaded_sources', [])
+                    if src.get('year') == year
+                ]
+                if not sources:
+                    lines.append("        · 未找到对应源文件信息（可能无法识别年份）")
+                    continue
+                for src in sources:
+                    src_rows = src.get('rows', 0)
+                    src_share = (src_rows / total_source_rows) if total_source_rows else 0
+                    has_factor = factor in src.get('columns', set())
+                    reason = "缺少该因子列" if not has_factor else "列存在但有效记录缺失"
+                    lines.append(
+                        f"        · 文件 {src.get('file_name', '未知')}:{src_rows} 行，占合并数据 {src_share:.1%}，{reason}"
+                    )
+
+        passed = True
+        if len(unique_years) < min_years:
+            lines.append("  - [FAIL] 信号日期年份少于要求")
+            passed = False
+        if unique_days < min_trading_days:
+            lines.append("  - [FAIL] 覆盖交易日过少，无法代表完整区间")
+            passed = False
+        if factor_alerts:
+            lines.append("  - [FAIL] 存在因子在多年份缺失，结果失真")
+            passed = False
+
+        if passed:
+            lines.append("[VALIDATION] 样本覆盖复核通过")
+        else:
+            lines.append("[VALIDATION] 样本覆盖复核未通过")
+
+        for line in lines:
+            print(line)
+        return passed
 
     def _report_missing_columns(self, missing_cols: Sequence[str]):
         diag_list = getattr(self, 'parse_diagnostics', [])
@@ -667,7 +800,7 @@ class FactorAnalysis:
             # 注意：根据用户要求，我们不删除任何数据，只记录异常信息
             # 仅删除收益率和因子列的缺失值行，以确保分析有意义的数据
             original_len = len(df)
-            df = df.dropna(subset=[self.return_col] + self.factors)
+            df = df.dropna(subset=[self.return_col])
             self.anomaly_stats['missing_values']['total_removed'] = original_len - len(df)
             
             if len(df) < original_len:
@@ -2000,7 +2133,10 @@ class FactorAnalysis:
             group_results = self.calculate_group_returns(factor)
             if group_results:
                 print(f"\n分组收益分析:")
-                print(group_results['avg_returns'].to_string(index=False, float_format='%.3f'))
+                preview = group_results['avg_returns'].head(5)
+                print(preview.to_string(index=False, float_format='%.3f'))
+                if len(group_results['avg_returns']) > len(preview):
+                    print("  … 其余分组已省略，详见报告文件")
                 print(f"\n多空收益(最高组-最低组): {group_results['long_short_return']:.3f}")
             if isinstance(extra_stats, dict):
                 if group_results:

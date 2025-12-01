@@ -135,6 +135,12 @@ def main(argv=None):
         return
     else:
         print(f"[INFO] 数据加载完成，原始样本量 {len(analyzer.data)} 行")
+
+    # 数据完整性校验
+    if not analyzer.validate_data_sources():
+        print("[ERROR] 数据验证未通过，请检查数据文件后重试")
+        logger.close()
+        return
     
     # 预处理数据
     print("\n[INFO] === 数据预处理 ===")
@@ -152,6 +158,11 @@ def main(argv=None):
     else:
         processed_rows = len(getattr(analyzer, 'processed_data', []))
         print(f"[INFO] 数据预处理完成，剩余样本 {processed_rows} 行")
+
+    if not analyzer.validate_processed_coverage():
+        print("[ERROR] 样本覆盖不足，终止分析")
+        logger.close()
+        return
     
     print("\n[INFO] === 因子分析选项 ===")
     print("\n[INFO] 可用的因子列表:")
