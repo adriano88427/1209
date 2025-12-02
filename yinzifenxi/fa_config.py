@@ -92,32 +92,25 @@ DATA_PARSE_CONFIG: Dict[str, Any] = {
         "次日开盘涨跌幅": "percent",
         "当日最高涨幅": "percent",
     },
-    # column_enabled: 是否参与后续因子分析（"是" / "否"，默认"是"）
-    "column_enabled": {
-        "当日回调": "是",
-        "机构持股比例(%)": "是",
-        "流通市值(元)": "是",
-        "财务投资机构合计（投资公司+私募+集合理财+其他理财+员工持股+信托+QFII+券商+基金）": "是",
-        "朋友合计（企业大股东（大非）+社保+保险）": "是",
-        "十大流通个人持股合计": "是",
-        "高管/大股东持股比例大非": "是",
-        "普通散户持股比例": "是",
-        "企业大股东大非（包含国资）": "是",
-        "企业大股东（包含国资）（小非）": "是",
-        "前10大流通股东持股比例合计": "是",
-        "十大流通股东小非合计": "是",
-        "十大流通股东大非合计": "是",
-        "十大流通机构大非": "是",
-        "十大流通机构小非": "是",
-        "基金持仓占比": "是",
-        "QFII持仓占比": "是",
-        "持有基金家数": "是",
-        "当日最高涨幅": "是",
-        "次日开盘涨跌幅": "是",
-        "当日最高涨幅": "是",
-        
-    },
 }
+
+# 收益率列名称（所有IC/收益分析均依赖此列）
+RETURN_COLUMN = '次日开盘买入持股两日收益率'
+
+
+def _derive_factor_columns() -> List[str]:
+    """根据 column_types 定义自动生成因子列列表，避免重复维护。"""
+    column_types = DATA_PARSE_CONFIG.get("column_types", {}) or {}
+    ordered_columns: List[str] = []
+    seen = set()
+    for column in column_types.keys():
+        normalized = str(column).strip()
+        if not normalized or normalized == RETURN_COLUMN:
+            continue
+        if normalized not in seen:
+            ordered_columns.append(normalized)
+            seen.add(normalized)
+    return ordered_columns
 
 # 因子语义 & 处理策略元数据
 FACTOR_META: Dict[str, Dict[str, Any]] = {
@@ -193,38 +186,8 @@ PERCENT_STYLE_COLUMNS: List[str] = []
 COLUMN_ALIGNMENT_RULES: Dict[str, Dict[str, Any]] = {}
 
 # 需要分析的因子列（非参数 & 带参数分析都会引用）
-# 优先从 column_enabled 中读取，确保只需配置一次；若未提供则使用回退列表
-_LEGACY_FACTOR_COLUMNS = [
-    '当日回调',
-    '机构持股比例(%)',
-    '流通市值(元)',
-    '财务投资机构合计（投资公司+私募+集合理财+其他理财+员工持股+信托+QFII+券商+基金）',
-    '朋友合计（企业大股东（大非）+社保+保险）',
-    '十大流通个人持股合计',
-    '高管/大股东持股比例大非',
-    '普通散户持股比例',
-    '企业大股东大非（包含国资）',
-    '企业大股东（包含国资）（小非）',
-    '前10大流通股东持股比例合计',
-    '十大流通股东小非合计',
-    '十大流通股东大非合计',
-    '十大流通机构大非',
-    '十大流通机构小非',
-    '基金持仓占比',
-    'QFII持仓占比',
-    '持有基金家数',
-]
-_enabled_flags = DATA_PARSE_CONFIG.get("column_enabled") or {}
-if _enabled_flags:
-    FACTOR_COLUMNS = [
-        column for column, flag in _enabled_flags.items()
-        if str(flag).strip().lower() not in {"否", "no", "0", "false"}
-    ]
-else:
-    FACTOR_COLUMNS = _LEGACY_FACTOR_COLUMNS
-
-# 收益率列名称（所有IC/收益分析均依赖此列）
-RETURN_COLUMN = '次日开盘买入持股两日收益率'
+# 程序会自动对这些列（及收益列）尝试进行字符串/百分比到数值的转换，无需额外配置。
+FACTOR_COLUMNS = _derive_factor_columns()
 
 # =============================
 # 系统内置常量（无需用户调整）

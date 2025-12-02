@@ -110,15 +110,8 @@ class FactorAnalysis:
         self.file_paths = resolved_paths
         self.file_path = self.file_paths[0] if self.file_paths else None
         self.data = data
-        enabled_flags = DATA_PARSE_CONFIG.get("column_enabled", {}) or {}
-        self.factors = [
-            factor for factor in FACTOR_COLUMNS
-            if enabled_flags.get(factor, "是") != "否"
-        ]
-        self.disabled_factors = [
-            factor for factor in FACTOR_COLUMNS
-            if enabled_flags.get(factor, "是") == "否"
-        ]
+        self.factors = list(FACTOR_COLUMNS)
+        self.disabled_factors = []
         self.return_col = RETURN_COLUMN
         self.analysis_results = {}
         self.segment_overview = {}
@@ -468,13 +461,36 @@ class FactorAnalysis:
             return False
 
         valid_dates = pd.to_datetime(df['信号日期'], errors='coerce').dropna()
-        year_counts = valid_dates.dt.year.dropna().value_counts().sort_index()
+        year_series = valid_dates.dt.year.dropna()
+        year_counts = year_series.value_counts().sort_index()
         unique_years = list(year_counts.index)
         unique_days = int(valid_dates.dt.normalize().nunique())
+
+        source_years = sorted(
+            {
+                int(src.get('year'))
+                for src in getattr(self, 'loaded_sources', [])
+                if src.get('year') is not None
+            }
+        )
+        reference_years = source_years or unique_years
+        available_years = len(reference_years) or 1
+        adaptive_min_years = min(min_years, max(1, available_years))
+        single_period_dataset = available_years <= 1
+        adaptive_min_days = (
+            min(min_trading_days, max(120, unique_days))
+            if single_period_dataset
+            else min_trading_days
+        )
+
         lines.append(
             f"  - 预处理后覆盖年份: {', '.join(str(y) for y in unique_years) if unique_years else '无'}"
             f" (共 {len(unique_years)} 年)，覆盖交易日 {unique_days} 天"
         )
+        if single_period_dataset:
+            lines.append(
+                f"    · 检测到单年度数据集，年份阈值放宽至 {adaptive_min_years} 年，交易日至少 {adaptive_min_days} 天"
+            )
 
         factor_alerts = []
         for factor in self.factors:
@@ -487,8 +503,12 @@ class FactorAnalysis:
                     'factor_years': [],
                 })
                 continue
-            factor_years = sorted(pd.to_datetime(factor_df['信号日期'], errors='coerce').dropna().dt.year.unique())
-            if len(factor_years) < min_years:
+            factor_years = sorted(
+                pd.to_datetime(factor_df['信号日期'], errors='coerce')
+                .dropna()
+                .dt.year.unique()
+            )
+            if len(factor_years) < adaptive_min_years:
                 missing_years = sorted(set(unique_years) - set(factor_years))
                 factor_alerts.append({
                     'factor': factor,
@@ -505,7 +525,7 @@ class FactorAnalysis:
             factor_years = alert.get('factor_years', [])
             lines.append(
                 f"    · 因子 {factor}: 已覆盖年份 {', '.join(str(y) for y in factor_years) if factor_years else '无'}，"
-                f"缺失年份 {', '.join(str(y) for y in missing_years) if missing_years else '未知'}（{alert.get('message')}）"
+                f"缺失年份 {', '.join(str(y) for y in missing_years) if missing_years else '无'}（{alert.get('message')}）"
             )
             for year in missing_years:
                 year_sample = year_counts.get(year, 0)
@@ -530,11 +550,15 @@ class FactorAnalysis:
                     )
 
         passed = True
-        if len(unique_years) < min_years:
-            lines.append("  - [FAIL] 信号日期年份少于要求")
+        if len(unique_years) < adaptive_min_years:
+            lines.append(
+                f"  - [FAIL] 信号日期年份少于要求（至少 {adaptive_min_years} 年）"
+            )
             passed = False
-        if unique_days < min_trading_days:
-            lines.append("  - [FAIL] 覆盖交易日过少，无法代表完整区间")
+        if unique_days < adaptive_min_days:
+            lines.append(
+                f"  - [FAIL] 覆盖交易日过少，至少 {adaptive_min_days} 天以代表完整区间"
+            )
             passed = False
         if factor_alerts:
             lines.append("  - [FAIL] 存在因子在多年份缺失，结果失真")

@@ -46,16 +46,9 @@ class ParameterizedFactorAnalyzer:
             resolved_paths = []
         self.file_paths = resolved_paths
         self.file_path = self.file_paths[0] if self.file_paths else None
-        enabled_flags = DATA_PARSE_CONFIG.get("column_enabled", {}) or {}
-        self.factors = [
-            factor for factor in FACTOR_COLUMNS
-            if enabled_flags.get(factor, "是") != "否"
-        ]
+        self.factors = list(FACTOR_COLUMNS)
         self.factor_list = self.factors  # 修复：添加factor_list属性
-        self.disabled_factors = [
-            factor for factor in FACTOR_COLUMNS
-            if enabled_flags.get(factor, "是") == "否"
-        ]
+        self.disabled_factors = []
         self.return_col = RETURN_COLUMN
         self.sqrt_annualization_factor = np.sqrt(252)
         self.annualization_factor = 252

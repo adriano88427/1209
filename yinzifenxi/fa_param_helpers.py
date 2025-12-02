@@ -22,6 +22,7 @@ def _fa_score_parameterized_factors(factor_results):
         'sharpe': [],
         'std': [],
         'drawdown': [],
+        'trade': [],
     }
 
     for results in factor_results.values():
@@ -35,6 +36,9 @@ def _fa_score_parameterized_factors(factor_results):
                 metric_samples['std'].append(float(group['年化收益标准差']))
             if pd.notna(group['最大回撤']):
                 metric_samples['drawdown'].append(float(group['最大回撤']))
+            avg_trade = group.get('平均收益')
+            if pd.notna(avg_trade):
+                metric_samples['trade'].append(float(avg_trade))
 
     def _score_linear(value, best, worst, higher_better=True):
         if value is None or pd.isna(value):
@@ -80,6 +84,7 @@ def _fa_score_parameterized_factors(factor_results):
         'sharpe': _calc_bounds(metric_samples['sharpe'], True, 1.0, 0.0),
         'std': _calc_bounds(metric_samples['std'], False, 0.5, 3.0),
         'drawdown': _calc_bounds(metric_samples['drawdown'], False, 0.1, 0.7),
+        'trade': _calc_bounds(metric_samples['trade'], True, 1.0, 0.0),
     }
 
     for factor, results in factor_results.items():
@@ -92,6 +97,7 @@ def _fa_score_parameterized_factors(factor_results):
             ann_return = group['年化收益率']
             ann_std = group['年化收益标准差']
             sharpe_ratio = group['年化夏普比率']
+            avg_trade = group.get('平均收益')
 
             win_score = _score_linear(win_rate, best=0.65, worst=0.45, higher_better=True)
             return_score = _score_linear(ann_return, *bounds['return'], higher_better=True)
@@ -99,12 +105,14 @@ def _fa_score_parameterized_factors(factor_results):
             std_score = _score_linear(ann_std, *bounds['std'], higher_better=False)
             drawdown_value = float(max_drawdown) if max_drawdown is not None else None
             drawdown_score = _score_linear(drawdown_value, *bounds['drawdown'], higher_better=False)
+            trade_score = _score_linear(avg_trade, *bounds['trade'], higher_better=True)
 
             total_score = (
                 return_score * 0.30
                 + sharpe_score * 0.30
                 + std_score * 0.10
-                + drawdown_score * 0.30
+                + drawdown_score * 0.20
+                + trade_score * 0.10
             )
             factor_direction = "正向" if ann_return >= 0 else "负向"
 
@@ -128,6 +136,7 @@ def _fa_score_parameterized_factors(factor_results):
                 '夏普得分': sharpe_score,
                 '风险得分': std_score,
                 '回撤得分': drawdown_score,
+                '平均收益得分': trade_score,
                 '值语义': factor_semantic,
             })
 
