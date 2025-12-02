@@ -5,6 +5,7 @@
 """
 
 import os
+import math
 import unicodedata
 import numpy as np
 import pandas as pd
@@ -171,16 +172,22 @@ class ParameterizedFactorAnalyzer:
                 if normalized_series.notna().any():
                     df[col] = normalized_series
                     self.normalization_stats[col] = info
+                    if (
+                        self.parse_config.get("column_types", {}).get(col) == "percent"
+                        and info.semantic != "percent"
+                    ):
+                        info.semantic = "percent"
+                        info.display = "ratio"
                     if info.applied_scale:
-                        print(f"[INFO] 列 '{col}' 自动缩放: {info.applied_scale}")
+                        print(f"[INFO] ??'{col}' ????: {info.applied_scale}")
                     elif info.semantic == "percent" and info.detected_percent_pattern:
-                        print(f"[INFO] 列 '{col}' 识别到百分比格式并已转换为小数")
+                        print(f"[INFO] ??'{col}' ???????????????")
                 else:
                     fallback = self._fallback_numeric_conversion(raw_series)
                     df[col] = fallback
                     self.normalization_stats[col] = info
-                    print(f"[WARN] 列 '{col}' 正规化失败，使用回退转换")
-
+                    print(f"[WARN] ??'{col}' ????????????")
+            self._ensure_no_suspected_shrink()
             self._log_normalization_notes()
             
             # 处理收益率列（保证为数值）
@@ -208,25 +215,61 @@ class ParameterizedFactorAnalyzer:
             return False
     
     def _log_normalization_notes(self):
-        """在日志中输出数据标准化说明表格。"""
-        stats = getattr(self, "normalization_stats", {}) or {}
+        """?????????????"""
+        stats = getattr(self, 'normalization_stats', {}) or {}
         if not stats:
             return
         rows = []
         for column, info in stats.items():
-            applied = "--" if info.applied_scale is None else f"{info.applied_scale:g}"
-            notes = info.notes or ("自动识别百分比" if info.detected_percent_pattern else "--")
+            applied = '--' if info.applied_scale is None else f"{info.applied_scale:g}"
+            notes = info.notes or ('???????' if info.detected_percent_pattern else '--')
             rows.append({
-                "列名": column,
-                "语义": info.semantic,
-                "展示格式": info.display,
-                "缩放": applied,
-                "备注": notes,
+                '??': column,
+                '??': info.semantic,
+                '????': info.display,
+                '??': applied,
+                '??': notes,
             })
         if rows:
-            table = pd.DataFrame(rows, columns=["列名", "语义", "展示格式", "缩放", "备注"])
-            print("\n[INFO] === 数据标准化说明 ===")
+            table = pd.DataFrame(rows, columns=['??', '??', '????', '??', '??'])
+            print("\n[INFO] === ??????? ===")
             print(table.to_string(index=False))
+
+    def _ensure_no_suspected_shrink(self):
+        stats = getattr(self, 'normalization_stats', {}) or {}
+        flagged = [
+            column for column, info in stats.items()
+            if getattr(info, 'suspected_shrink', False)
+        ]
+        if flagged:
+            message = f"检测到疑似被错误除以 100 的列: {', '.join(flagged)}"
+            print(f"[ERROR] {message}")
+            raise ValueError(message)
+
+    def _assign_user_forced_groups(self, df_clean: pd.DataFrame, factor_col: str) -> None:
+        """??????????????????"""
+        total_count = len(df_clean)
+        if total_count <= 0:
+            df_clean['??'] = np.nan
+            return
+
+        base_size = max(1, math.ceil(total_count / 10))
+        zero_mask = df_clean[factor_col] == 0
+        nonzero_df = df_clean[~zero_mask]
+        nonzero_count = len(nonzero_df)
+        nonzero_groups = max(1, math.ceil(nonzero_count / base_size)) if nonzero_count > 0 else 0
+
+        df_clean['??'] = np.nan
+        if zero_mask.any():
+            df_clean.loc[zero_mask, '??'] = 0
+
+        if nonzero_count > 0:
+            sorted_index = nonzero_df.sort_values(factor_col).index
+            chunks = np.array_split(sorted_index, nonzero_groups)
+            for idx, chunk in enumerate(chunks, start=1):
+                if len(chunk) > 0:
+                    df_clean.loc[chunk, '??'] = idx
+
 
     def _report_parse_integrity(self):
         """根据解析诊断信息输出每个文件的字段覆盖情况。"""
@@ -331,17 +374,19 @@ class ParameterizedFactorAnalyzer:
             return None
         
         try:
-            # 计算分组收益（默认使用配置中的等分数量）
-            group_count = DEFAULT_GROUP_COUNT
-            df_clean['分组'] = pd.qcut(df_clean[factor_col], q=group_count, labels=False, duplicates='drop')
-            
-            # 计算每组的统计指标
+            # ??????????????????
+            self._assign_user_forced_groups(df_clean, factor_col)
+            group_labels = sorted(g for g in df_clean['??'].dropna().unique())
+            if not group_labels:
+                print(f"[WARN] ?? {factor_col} ???????")
+                return None
+
             group_stats = []
             total_samples = len(df_clean)
-            
-            for group_id in range(group_count):
-                group_data = df_clean[df_clean['分组'] == group_id]
-                
+
+            for group_id in group_labels:
+                group_data = df_clean[df_clean['??'] == group_id]
+
                 if len(group_data) == 0:
                     continue
                 
@@ -626,4 +671,3 @@ class ParameterizedFactorAnalyzer:
             sample_sizes=sample_sizes,
             n_iterations=n_iterations,
         )
-

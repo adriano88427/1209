@@ -57,6 +57,120 @@ class ParsedData:
     unavailable_columns: List[str]
 
 
+@dataclass
+class NormalizationInfo:
+    column: str
+    semantic: str = "numeric"
+    display: str = "raw"
+    applied_scale: Optional[float] = None
+    detected_percent_pattern: bool = False
+    suspected_shrink: bool = False
+    notes: Optional[str] = None
+
+
+class FactorNormalizer:
+    """简单的列正则化器，用于处理百分比/涨跌幅等列."""
+
+    def __init__(self, percent_keywords: Optional[Sequence[str]] = None):
+        if percent_keywords is None:
+            percent_keywords = [
+                "%",
+                "比例",
+                "占比",
+                "收益",
+                "涨幅",
+                "跌幅",
+                "回撤",
+            ]
+        self.percent_keywords = tuple(percent_keywords)
+
+    def normalize(self, column: str, series: pd.Series, diagnostics=None) -> Tuple[pd.Series, NormalizationInfo]:
+        info = NormalizationInfo(column=column)
+        if series is None:
+            return pd.Series(dtype=float), info
+
+        ser = series.copy()
+        if not isinstance(ser, pd.Series):
+            ser = pd.Series(ser)
+
+        percent_mask = pd.Series(False, index=ser.index)
+        has_percent_symbol = False
+        if ser.dtype == object:
+            str_series = ser.astype(str).str.strip()
+            percent_mask = str_series.str.contains("%", na=False)
+            has_percent_symbol = percent_mask.any()
+            cleaned = str_series.str.replace("%", "", regex=False).str.replace(",", "")
+            ser_numeric = pd.to_numeric(cleaned, errors="coerce")
+        else:
+            ser_numeric = pd.to_numeric(ser, errors="coerce")
+            percent_mask = pd.Series(False, index=ser.index)
+
+        scale = 1.0
+        if has_percent_symbol:
+            ser_numeric.loc[percent_mask] = ser_numeric.loc[percent_mask] / 100.0
+            scale *= 0.01
+            info.detected_percent_pattern = True
+            info.semantic = "percent"
+            info.display = "ratio"
+
+        if info.semantic == "numeric":
+            info.display = "raw"
+
+        if self._looks_like_percent_column(column):
+            info.semantic = "percent"
+            info.display = "ratio"
+            abs_max = float(ser_numeric.abs().max(skipna=True)) if ser_numeric.notna().any() else 0.0
+            if abs_max > 1.5:
+                ser_numeric = ser_numeric / 100.0
+                scale *= 0.01
+            elif abs_max > 0 and abs_max < 0.5 and has_percent_symbol:
+                # already scaled, do nothing
+                pass
+
+        abs_max_final = float(ser_numeric.abs().max(skipna=True)) if ser_numeric.notna().any() else 0.0
+        if info.semantic == "percent" and abs_max_final > 0 and abs_max_final <= 0.01:
+            info.suspected_shrink = True
+            warning = f"列 {column} 最大值仅 {abs_max_final*100:.2f}%，疑似被错误除以 100"
+            info.notes = warning if not info.notes else f"{info.notes}; {warning}"
+            print(f"[WARN] {warning}")
+
+        if scale != 1.0 or has_percent_symbol:
+            info.applied_scale = scale
+
+        return ser_numeric, info
+
+    def _looks_like_percent_column(self, column: str) -> bool:
+        if not column:
+            return False
+        return any(keyword in column for keyword in self.percent_keywords)
+
+    def format_range(
+        self,
+        column: str,
+        min_val: float,
+        max_val: float,
+        semantic: Optional[str] = None,
+        decimals: int = 3,
+    ) -> str:
+        try:
+            low = float(min_val)
+            high = float(max_val)
+        except (TypeError, ValueError):
+            return "N/A"
+        if not np.isfinite(low) or not np.isfinite(high):
+            return "N/A"
+
+        use_percent = False
+        if semantic == "percent":
+            use_percent = True
+        elif self._looks_like_percent_column(column):
+            use_percent = True
+
+        if use_percent:
+            return f"[{low * 100:.2f}%, {high * 100:.2f}%]"
+        return f"[{low:.{decimals}f}, {high:.{decimals}f}]"
+
+
 class MultiEngineExcelLoader:
     """负责根据配置自动选择引擎读取 Excel / CSV 文件。"""
 
@@ -167,19 +281,32 @@ class ValueConverter:
                 continue
 
             target_type = self.column_types.get(column, "auto")
-            converted, fail_rate = self._convert_series(series, target_type)
+            converted, fail_rate = self._convert_series(series, target_type, column)
             df[column] = converted
             if fail_rate > 0:
                 fail_rates[column] = fail_rate
         return df, fail_rates
 
-    def _convert_series(self, series: pd.Series, target_type: str) -> Tuple[pd.Series, float]:
+    def _convert_series(self, series: pd.Series, target_type: str, column_name: Optional[str] = None) -> Tuple[pd.Series, float]:
         cleaned = series.astype(str).str.strip()
         cleaned = cleaned.replace({val: np.nan for val in self.na_values})
 
         if target_type == "percent":
-            cleaned = cleaned.str.replace("%", "").str.replace("％", "")
-            numeric = pd.to_numeric(cleaned, errors="coerce") / 100
+            percent_mask = cleaned.str.contains("%", na=False)
+            cleaned = (
+                cleaned.str.replace("%", "", regex=False)
+                .str.replace("??", "", regex=False)
+                .str.replace(",", "")
+            )
+            numeric = pd.to_numeric(cleaned, errors="coerce")
+            if percent_mask.any():
+                numeric.loc[percent_mask] = numeric.loc[percent_mask] / 100.0
+            abs_max = float(numeric.abs().max(skipna=True)) if numeric.notna().any() else 0.0
+            if not percent_mask.any() and abs_max > 1.5:
+                numeric = numeric / 100.0
+                abs_max = abs_max / 100.0
+            if abs_max > 0 and abs_max <= 0.01 and column_name:
+                print(f"[WARN] ? {column_name} ???? {abs_max*100:.2f}% ???????? 100")
         elif target_type == "amount":
             numeric = cleaned.apply(self._parse_amount)
         elif target_type == "date":

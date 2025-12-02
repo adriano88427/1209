@@ -61,6 +61,9 @@ DATA_PARSE_CONFIG: Dict[str, Any] = {
         "基金持仓占比": [],
         "QFII持仓占比": [],
         "持有基金家数": [],
+        "当日最高涨幅": ["当日最大涨幅"],
+         "当日收盘涨跌幅": ["收盘涨跌幅","信号当日收盘涨跌幅"],
+         "次日开盘涨跌幅": []
     },
     # column_types 取值说明：
     # - "percent": 原始值以百分比表示，解析时除以100并存为小数
@@ -85,6 +88,9 @@ DATA_PARSE_CONFIG: Dict[str, Any] = {
         "基金持仓占比": "percent",
         "QFII持仓占比": "percent",
         "持有基金家数": "auto",
+         "当日最高涨幅": "percent",
+        "次日开盘涨跌幅": "percent",
+        "当日最高涨幅": "percent",
     },
     # column_enabled: 是否参与后续因子分析（"是" / "否"，默认"是"）
     "column_enabled": {
@@ -106,6 +112,10 @@ DATA_PARSE_CONFIG: Dict[str, Any] = {
         "基金持仓占比": "是",
         "QFII持仓占比": "是",
         "持有基金家数": "是",
+        "当日最高涨幅": "是",
+        "次日开盘涨跌幅": "是",
+        "当日最高涨幅": "是",
+        
     },
 }
 
@@ -183,8 +193,8 @@ PERCENT_STYLE_COLUMNS: List[str] = []
 COLUMN_ALIGNMENT_RULES: Dict[str, Dict[str, Any]] = {}
 
 # 需要分析的因子列（非参数 & 带参数分析都会引用）
-# 程序会自动对这些列（及收益列）尝试进行字符串/百分比到数值的转换，无需额外配置。
-FACTOR_COLUMNS = [
+# 优先从 column_enabled 中读取，确保只需配置一次；若未提供则使用回退列表
+_LEGACY_FACTOR_COLUMNS = [
     '当日回调',
     '机构持股比例(%)',
     '流通市值(元)',
@@ -192,9 +202,26 @@ FACTOR_COLUMNS = [
     '朋友合计（企业大股东（大非）+社保+保险）',
     '十大流通个人持股合计',
     '高管/大股东持股比例大非',
-    '普通散户持股比例','企业大股东大非（包含国资）','企业大股东（包含国资）（小非）','前10大流通股东持股比例合计','十大流通股东小非合计','十大流通股东大非合计',
-    '十大流通机构大非','十大流通机构小非','基金持仓占比','QFII持仓占比','持有基金家数',
+    '普通散户持股比例',
+    '企业大股东大非（包含国资）',
+    '企业大股东（包含国资）（小非）',
+    '前10大流通股东持股比例合计',
+    '十大流通股东小非合计',
+    '十大流通股东大非合计',
+    '十大流通机构大非',
+    '十大流通机构小非',
+    '基金持仓占比',
+    'QFII持仓占比',
+    '持有基金家数',
 ]
+_enabled_flags = DATA_PARSE_CONFIG.get("column_enabled") or {}
+if _enabled_flags:
+    FACTOR_COLUMNS = [
+        column for column, flag in _enabled_flags.items()
+        if str(flag).strip().lower() not in {"否", "no", "0", "false"}
+    ]
+else:
+    FACTOR_COLUMNS = _LEGACY_FACTOR_COLUMNS
 
 # 收益率列名称（所有IC/收益分析均依赖此列）
 RETURN_COLUMN = '次日开盘买入持股两日收益率'

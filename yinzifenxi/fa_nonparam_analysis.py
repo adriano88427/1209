@@ -686,6 +686,17 @@ class FactorAnalysis:
         
         return processed_df
     
+    def _ensure_no_suspected_shrink(self):
+        stats = getattr(self, 'normalization_stats', {}) or {}
+        flagged = [
+            column for column, info in stats.items()
+            if getattr(info, 'suspected_shrink', False)
+        ]
+        if flagged:
+            message = f"检测到疑似被错误除以 100 的列: {', '.join(flagged)}"
+            print(f"[ERROR] {message}")
+            raise ValueError(message)
+
     def preprocess_data(
         self,
         process_factors=None,
@@ -754,16 +765,21 @@ class FactorAnalysis:
                 if normalized_series.notna().any():
                     df[col] = normalized_series
                     self.normalization_stats[col] = info
+                    if (
+                        self.parse_config.get("column_types", {}).get(col) == "percent"
+                        and info.semantic != "percent"
+                    ):
+                        info.semantic = "percent"
+                        info.display = "ratio"
                     if info.applied_scale:
-                        print(f"[INFO] 列 '{col}' 自动缩放: {info.applied_scale}")
+                        print(f"[INFO] ?? '{col}' ???????: {info.applied_scale}")
                     elif info.semantic == "percent" and info.detected_percent_pattern:
-                        print(f"[INFO] 列 '{col}' 识别到百分比格式并已转换为小数")
+                        print(f"[INFO] ?? '{col}' ????????????????????")
                 else:
                     fallback = self._fallback_numeric_conversion(raw_series)
                     df[col] = fallback
                     self.normalization_stats[col] = info
-                    print(f"[WARN] 列 '{col}' 正规化失败，使用回退转换")
-            
+                    print(f"[WARN] ?? '{col}' ?????????????????")
             # 确保日期列正确处理
             if '信号日期' in df.columns:
                 try:
