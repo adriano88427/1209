@@ -214,3 +214,55 @@ Factor analysis log - 2025-12-06 02:58:21
 [OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
 [INFO] Factor analysis core computation took 315.54s with 20 factor results
 [INFO] Integrating auxiliary robustness statistics...
+[OK] \u8f85\u52a9analysis\u6458\u8981\u5df2\u8ba1\u7b97(\u4e0d\u518d\u5355\u72ec\u5bfc\u51faCSV)
+[OK] \u8f85\u52a9\u7a33\u5065\u6027\u8bc4\u5206\u6458\u8981\u5df2\u8ba1\u7b97(\u4e0d\u518d\u5355\u72ec\u5bfc\u51faCSV)
+[OK] \u8f85\u52a9analysis\u6570\u636e\u5df2\u7f13\u5b58, \u53ef\u5728report\u548c\u8bc4\u5206\u4e2d\u4f7f\u7528
+[INFO] Auxiliary robustness statistics merged successfully in 340.42s
+[INFO] Summary dataframe generated in 0.06s
+[INFO] Main single-factor report generated in 0.08s
+[INFO] Factor analysis stage ended in 656.11s.
+[INFO] Running 10-bucket grouped analysis for every factor...
+[STEP] Analyzing factor: \u5f53\u65e5\u56de\u8c03
+[STEP] Analyzing factor: \u673a\u6784\u6301\u80a1\u6bd4\u4f8b(%)
+[STEP] Analyzing factor: \u6d41\u901a\u5e02\u503c(\u5143)
+[STEP] Analyzing factor: \u8d22\u52a1\u6295\u8d44\u673a\u6784\u5408\u8ba1(\u6295\u8d44\u516c\u53f8+\u79c1\u52df+\u96c6\u5408\u7406\u8d22+\u5176\u4ed6\u7406\u8d22+\u5458\u5de5\u6301\u80a1+\u4fe1\u6258+QFII+\u5238\u5546+\u57fa\u91d1)
+[STEP] Analyzing factor: \u670b\u53cb\u5408\u8ba1(\u4f01\u4e1a\u5927\u80a1\u4e1c(\u5927\u975e)+\u793e\u4fdd+\u4fdd\u9669)
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u4e2a\u4eba\u6301\u80a1\u5408\u8ba1
+[STEP] Analyzing factor: \u9ad8\u7ba1/\u5927\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5927\u975e
+[STEP] Analyzing factor: \u666e\u901a\u6563\u6237\u6301\u80a1\u6bd4\u4f8b
+[STEP] Analyzing factor: \u4f01\u4e1a\u5927\u80a1\u4e1c\u5927\u975e(\u5305\u542b\u56fd\u8d44)
+[STEP] Analyzing factor: \u4f01\u4e1a\u5927\u80a1\u4e1c(\u5305\u542b\u56fd\u8d44)(\u5c0f\u975e)
+[STEP] Analyzing factor: \u524d10\u5927\u6d41\u901a\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5408\u8ba1
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5c0f\u975e\u5408\u8ba1
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5927\u975e\u5408\u8ba1
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u673a\u6784\u5927\u975e
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u673a\u6784\u5c0f\u975e
+[STEP] Analyzing factor: \u57fa\u91d1\u6301\u4ed3ratio
+[STEP] Analyzing factor: QFII\u6301\u4ed3ratio
+[STEP] Analyzing factor: \u6301\u6709\u57fa\u91d1\u5bb6\u6570
+[STEP] Analyzing factor: \u5f53\u65e5\u6700\u9ad8\u6da8\u5e45
+[STEP] Analyzing factor: \u6b21\u65e5\u5f00\u76d8\u6da8\u8dcc\u5e45
+[INFO] Grouped factor walkthrough completed in 0.28s.
+[INFO] === Factor analysis results saved ===
+[INFO] Generating parameterized factor summary report...
+[INFO] === ??????? ===
+[INFO] \u5df2generated\u5e26\u9ad8\u4eae\u7684Excel: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u5e26\u53c2\u6570factoranalysis\u6570\u636e_20251206_031251.xlsx
+[OK] Parameterized factor HTML report generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u5e26\u53c2\u6570factor\u7efc\u5408analysisreport_20251206_031251.html
+[INFO] Parameterized factor stage finished in 5.68s.
+[INFO] === Dual-factor non-parametric analysis ===
+[INFO] \u53ccfactor\u9884\u7b5bprogress 1/15
+[INFO] \u53ccfactor\u9884\u7b5bprogress 11/15
+[INFO][DUAL-NONPARAM] Workflow completed in 2.08s with 15 results.
+[OK] Dual-factor non-parametric CSV generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u975e\u53c2\u6570\u6c47\u603b_20251206_031253.csv
+[OK] Dual-factor non-parametric HTML generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u975e\u53c2\u6570analysis_20251206_031253.html
+[INFO] === Dual-factor parametric analysis ===
+[INFO][DUAL-PARAM] Workflow completed in 1.50s with 15 results.
+[OK] Dual-factor parametric CSV generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u5e26\u53c2\u6570\u6c47\u603b_20251206_031254.csv
+[OK] Dual-factor parametric Excel generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u5e26\u53c2\u6570\u6570\u636e_20251206_031254.xlsx
+[OK] Dual-factor parametric HTML generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u5e26\u53c2\u6570analysis_20251206_031254.html
+[INFO] Factor analysis program completed
+[INFO] Total runtime: 873.50s
+
+
+Log recording finished - 2025-12-06 03:12:55
+============================================================
