@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-HTML 报告辅助组件。
+HTML 鎶ュ憡杈呭姪缁勪欢銆?
 """
 
 from __future__ import annotations
 
 import math
 from html import escape
-from typing import Callable, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -132,21 +132,42 @@ body {
 .alert-warn { background: rgba(231,76,60,0.09); color: #d54a34; }
 .table-wrapper {
     overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
-.table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-}
+  .table {
+      width: 100%;
+      min-width: unset;
+      border-collapse: collapse;
+      font-size: 13px;
+      table-layout: fixed;
+  }
+  .table-compact {
+      font-size: 12px;
+  }
 .table thead {
     background: linear-gradient(120deg, #244bdc, #5c7dff);
     color: #fff;
 }
-.table th, .table td {
-    padding: 11px 14px;
-    border: 1px solid var(--border);
-    text-align: left;
-}
+  .table th {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      text-align: left;
+      white-space: normal;
+      word-break: break-word;
+  }
+  .table-compact th {
+      padding: 6px 8px;
+  }
+  .table td {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      text-align: left;
+      word-break: break-word;
+  }
+  .table-compact td {
+      padding: 6px 8px;
+  }
 .table tbody tr:nth-child(even) {
     background: #f6f7fd;
 }
@@ -158,6 +179,9 @@ body {
 }
 .highlight-blue {
     background: #d7efff !important;
+}
+.highlight-manual {
+    background: #fff4c2 !important;
 }
 .score-emphasis {
     color: #0b5ed7;
@@ -270,16 +294,24 @@ body {
 }
 .details-block summary::-webkit-details-marker { display: none; }
 .details-block summary::after {
-    content: "▼";
+    content: "鈻?;
     font-size: 12px;
     margin-left: 6px;
     color: var(--muted);
 }
 .details-block details[open] summary::after {
-    content: "▲";
+    content: "鈻?;
 }
 .details-block .text-block {
     margin-top: 10px;
+}
+.years-cell {
+    width: 110px;
+    white-space: normal;
+}
+.years-multiline {
+    line-height: 1.4;
+    white-space: normal;
 }
 """
 
@@ -372,17 +404,34 @@ def render_table(
     empty_text: str = "暂无可展示的数据",
     cell_classes: Optional[dict] = None,
     table_class: Optional[str] = None,
+    row_classes: Optional[dict] = None,
+    column_classes: Optional[dict] = None,
+    html_columns: Optional[Sequence[str]] = None,
 ) -> str:
     if df is None or df.empty:
         return render_alert(empty_text, level="warn")
     headers = headers or columns
     formatters = formatters or {}
+    html_columns = set(html_columns or [])
     table_cls = "table"
     if table_class:
         table_cls = f"{table_cls} {table_class}"
-    thead = "".join(f"<th>{escape(str(h))}</th>" for h in headers)
+
+    header_cells: List[str] = []
+    for idx, header in enumerate(headers):
+        column_name = columns[idx] if idx < len(columns) else None
+        header_class = ""
+        if column_name and column_classes and column_name in column_classes:
+            header_class = f" class='{column_classes[column_name]}'"
+        header_cells.append(f"<th{header_class}>{escape(str(header))}</th>")
+    thead = "".join(header_cells)
+
     rows_html: List[str] = []
     for _, row in df.iterrows():
+        row_idx = row.name
+        row_class_attr = ""
+        if row_classes and row_idx in row_classes:
+            row_class_attr = f" class='{row_classes[row_idx]}'"
         cells: List[str] = []
         for col in columns:
             value = row[col] if col in row else None
@@ -394,15 +443,24 @@ def render_table(
                     cell_value = _format_cell(value)
             else:
                 cell_value = _format_cell(value)
-            cell_class = ""
-            if cell_classes:
-                row_idx = row.name
-                if row_idx in cell_classes and col in cell_classes[row_idx]:
-                    cell_class = f" class='{cell_classes[row_idx][col]}'"
-            cells.append(f"<td{cell_class}>{escape(str(cell_value))}</td>")
-        rows_html.append("<tr>" + "".join(cells) + "</tr>")
+            display_value = "--" if cell_value is None else str(cell_value)
+
+            class_parts: List[str] = []
+            if column_classes and col in column_classes:
+                class_parts.append(column_classes[col])
+            if cell_classes and row_idx in cell_classes and col in cell_classes[row_idx]:
+                class_parts.append(cell_classes[row_idx][col])
+            cell_class_attr = f" class='{' '.join(class_parts)}'" if class_parts else ""
+
+            if col in html_columns:
+                cell_content = display_value
+            else:
+                cell_content = escape(display_value)
+            cells.append(f"<td{cell_class_attr}>{cell_content}</td>")
+        rows_html.append(f"<tr{row_class_attr}>" + "".join(cells) + "</tr>")
     tbody = "".join(rows_html)
     return f"<div class='table-wrapper'><table class='{table_cls}'><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table></div>"
+
 
 
 def render_list(items: Iterable[str]) -> str:
@@ -413,8 +471,40 @@ def render_list(items: Iterable[str]) -> str:
     return f"<ul>{inner}</ul>"
 
 
-def render_text_block(text: str, empty_text: str = "暂无内容") -> str:
+def render_text_block(text: str, empty_text: str = "鏆傛棤鍐呭") -> str:
     stripped = (text or "").strip()
     if not stripped:
         return render_alert(empty_text, level="warn")
     return f"<div class='text-block'>{escape(stripped)}</div>"
+
+
+def build_run_metadata_section(
+    report_options: Optional[Dict[str, Any]],
+    result_count: int,
+) -> Tuple[List[Tuple[str, str]], str]:
+    """返回用于 hero meta 和“运行信息”表格的 HTML。"""
+    options = report_options or {}
+    log_file = options.get("log_file") or "未记录"
+    debug_mode = "已开启" if options.get("debug_enabled") else "未开启"
+    debug_dump = options.get("debug_dump_path") or "未生成"
+    rows = [
+        ("分析结果数量", str(result_count)),
+        ("日志文件", log_file),
+        ("调试模式", debug_mode),
+        ("调试原始日志", debug_dump),
+    ]
+    df = pd.DataFrame(rows, columns=["item", "value"])
+    table_html = render_table(
+        df,
+        columns=["item", "value"],
+        headers=["项目", "信息"],
+        empty_text="暂无运行信息",
+    )
+    meta_items: List[Tuple[str, str]] = [
+        ("结果数量", str(result_count)),
+        ("日志文件", log_file),
+        ("Debug", debug_mode),
+    ]
+    if debug_dump != "未生成":
+        meta_items.append(("调试原始日志", debug_dump))
+    return meta_items, table_html

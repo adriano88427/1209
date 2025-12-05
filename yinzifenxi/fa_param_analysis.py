@@ -59,6 +59,7 @@ class ParameterizedFactorAnalyzer:
         self.unavailable_columns = set()
         self.normalizer = FactorNormalizer()
         self.normalization_stats: Dict[str, NormalizationInfo] = {}
+        # 带参数分析需要保持原始因子值，因此不执行中性化
         
         # 确保数据有效
         if self.data is None or self.data.empty:
@@ -182,7 +183,7 @@ class ParameterizedFactorAnalyzer:
                     print(f"[WARN] ??'{col}' ????????????")
             self._ensure_no_suspected_shrink()
             self._log_normalization_notes()
-            
+
             # 处理收益率列（保证为数值）
             if not pd.api.types.is_numeric_dtype(df[self.return_col]):
                 df[self.return_col] = pd.to_numeric(df[self.return_col], errors='coerce')

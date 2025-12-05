@@ -46,13 +46,19 @@ def _fa_generate_summary_report(self):
             'IC标准差': results['ic_std'],
             'IR值': results['ir'],
             't统计量': results['t_stat'],
-            'p值': results['p_value']
+            'p值': results['p_value'],
+            '原始IC均值': results.get('raw_ic_mean'),
+            '原始IC标准差': results.get('raw_ic_std'),
+            '原始IR值': results.get('raw_ir'),
+            '原始t统计量': results.get('raw_t_stat'),
+            '原始p值': results.get('raw_p_value'),
         }
 
         if 'group_results' in results and results['group_results'] is not None:
             row['多空收益'] = results['group_results']['long_short_return']
 
         extra_stats = results.get('extra_stats') or {}
+        raw_extra_stats = results.get('raw_extra_stats') or {}
         if extra_stats:
             row['IC有效点数'] = extra_stats.get('daily_points')
             row['IC总日数'] = extra_stats.get('total_dates')
@@ -75,6 +81,12 @@ def _fa_generate_summary_report(self):
             segment_warnings = extra_stats.get('segment_warnings') or []
             row['板块警告'] = "；".join(segment_warnings) if segment_warnings else None
             row['板块建议'] = extra_stats.get('segment_recommendation')
+        if raw_extra_stats:
+            row['原始IC有效点数'] = raw_extra_stats.get('daily_points')
+            row['原始IC总日数'] = raw_extra_stats.get('total_dates')
+            row['原始IC缺样比例'] = raw_extra_stats.get('skip_ratio')
+            row['原始IC模式'] = raw_extra_stats.get('ic_mode')
+            row['原始筛选模式'] = raw_extra_stats.get('screening_mode')
 
         # 检查缺失值
         if np.isnan(results['ic_std']) or np.isnan(results['ir']):
@@ -88,19 +100,21 @@ def _fa_generate_summary_report(self):
     # 创建显示用的数据框，将缺失值替换为'N/A'
     display_df = summary_df.copy()
     float_cols = ['IC均值', 'IC标准差', 'IR值', 't统计量', 'p值', '多空收益',
+                  '原始IC均值', '原始IC标准差', '原始IR值', '原始t统计量', '原始p值',
                   '日均样本', '样本中位数', '样本P25', '主要板块IC', '次要板块IC']
     for col in float_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(lambda x: 'N/A' if pd.isna(x) else f"{x:.3f}")
 
-    percent_cols = ['IC缺样比例', '主要板块占比', '次要板块占比']
+    percent_cols = ['IC缺样比例', '原始IC缺样比例', '主要板块占比', '次要板块占比']
     for col in percent_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(
                 lambda x: 'N/A' if pd.isna(x) else f"{float(x)*100:.1f}%"
             )
 
-    int_cols = ['IC有效点数', 'IC总日数', '窗口天数', '日最小样本', '整体样本量']
+    int_cols = ['IC有效点数', 'IC总日数', '窗口天数', '日最小样本', '整体样本量',
+                '原始IC有效点数', '原始IC总日数']
     for col in int_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(
@@ -181,6 +195,7 @@ def _fa_generate_factor_analysis_report(self, summary_df, process_factors=False,
             [
                 ("分析因子数", str(len(summary_df))),
                 ("平均 IC", _fa_format_number(summary_df['IC均值'].mean(), 3)),
+                ("平均原始 IC", _fa_format_number(summary_df['原始IC均值'].mean(), 3)),
                 ("平均 IR", _fa_format_number(summary_df['IR值'].mean(), 3)),
                 ("多空收益中位数", _fa_format_number(summary_df['多空收益'].median(), 3)),
             ]
@@ -195,12 +210,14 @@ def _fa_generate_factor_analysis_report(self, summary_df, process_factors=False,
         if factors_df is None or factors_df.empty:
             return render_alert("暂无相关因子数据。", level="warn")
         avg_ic = _fa_format_number(factors_df['IC均值'].mean(), 3)
+        avg_raw_ic = _fa_format_number(factors_df['原始IC均值'].mean(), 3)
         avg_ir = _fa_format_number(factors_df['IR值'].mean(), 3)
         avg_lr = _fa_format_number(factors_df['多空收益'].mean(), 3)
         cards = render_metric_cards(
             [
                 ("因子数量", str(len(factors_df))),
                 ("平均IC", avg_ic),
+                ("平均原始IC", avg_raw_ic),
                 ("平均IR", avg_ir),
                 ("平均多空收益", avg_lr),
             ]
@@ -215,21 +232,22 @@ def _fa_generate_factor_analysis_report(self, summary_df, process_factors=False,
                     f"<div class='highlight-card'>"
                     f"<h4>TOP{idx} · {escape(row['因子名称'])}</h4>"
                     f"<p class='chip {badge_class}'>综合得分 { _fa_format_number(row['综合得分'], 2) }</p>"
-                    f"<p class='muted'>IC { _fa_format_number(row['IC均值'], 3) } · IR { _fa_format_number(row['IR值'],3) } · 多空收益 { _fa_format_number(row['多空收益'],3) }</p>"
+                    f"<p class='muted'>IC { _fa_format_number(row['IC均值'], 3) } / 原始IC { _fa_format_number(row['原始IC均值'], 3) } · IR { _fa_format_number(row['IR值'],3) } · 多空收益 { _fa_format_number(row['多空收益'],3) }</p>"
                     f"</div>"
                 )
             highlight_html = "<div class='grid-two'>" + "".join(items) + "</div>"
         else:
             highlight_html = render_alert("暂无排名信息。", level="warn")
 
-        display_df = factors_df[['因子名称', '综合得分', 'IC均值', 'IR值', '多空收益', '评级']].copy().head(10)
+        display_df = factors_df[['因子名称', '综合得分', 'IC均值', '原始IC均值', 'IR值', '多空收益', '评级']].copy().head(10)
         table_html = render_table(
             display_df,
-            ['因子名称', '综合得分', 'IC均值', 'IR值', '多空收益', '评级'],
-            headers=['因子', '综合得分', 'IC', 'IR', '多空收益', '评级'],
+            ['因子名称', '综合得分', 'IC均值', '原始IC均值', 'IR值', '多空收益', '评级'],
+            headers=['因子', '综合得分', 'IC', '原始IC', 'IR', '多空收益', '评级'],
             formatters={
                 '综合得分': lambda x: _fa_format_number(x, 2),
                 'IC均值': lambda x: _fa_format_number(x, 3),
+                '原始IC均值': lambda x: _fa_format_number(x, 3),
                 'IR值': lambda x: _fa_format_number(x, 3),
                 '多空收益': lambda x: _fa_format_number(x, 3),
             },
@@ -859,7 +877,9 @@ def _fa_generate_positive_factors_analysis(self, summary_mode=False):
             score_details.append(f"稳健性 {factor['稳健得分']:.1f}")
         if score_details:
             analysis_lines.append(f"- 评分拆解：{' / '.join(score_details)}")
-        analysis_lines.append(f"- IC 均值：{factor['IC均值']:.4f}，IC 标准差：{factor['IC标准差']:.4f}")
+        raw_ic_val = factor.get('原始IC均值')
+        raw_ic_text = f"，原始IC：{raw_ic_val:.4f}" if raw_ic_val is not None and not pd.isna(raw_ic_val) else ""
+        analysis_lines.append(f"- IC 均值：{factor['IC均值']:.4f}，IC 标准差：{factor['IC标准差']:.4f}{raw_ic_text}")
         analysis_lines.append(f"- IR 值：{factor['IR值']:.4f}，多空收益：{factor['多空收益']:.4f}")
         analysis_lines.append(f"- p 值：{factor['p值']:.4f}")
 
@@ -991,7 +1011,9 @@ def _fa_generate_negative_factors_analysis(self, summary_mode=False):
             score_details.append(f"稳健性 {factor['稳健得分']:.1f}")
         if score_details:
             analysis_lines.append(f"- 评分拆解：{' / '.join(score_details)}")
-        analysis_lines.append(f"- 反向 IC：{abs(factor['IC均值']):.4f}，IC 标准差：{factor['IC标准差']:.4f}")
+        raw_ic_val = factor.get('原始IC均值')
+        raw_ic_text = f"，原始IC：{abs(raw_ic_val):.4f}" if raw_ic_val is not None and not pd.isna(raw_ic_val) else ""
+        analysis_lines.append(f"- 反向 IC：{abs(factor['IC均值']):.4f}，IC 标准差：{factor['IC标准差']:.4f}{raw_ic_text}")
         analysis_lines.append(f"- IR 值：{factor['IR值']:.4f}，多空收益：{factor['多空收益']:.4f}")
         analysis_lines.append(f"- p 值：{factor['p值']:.4f}")
 

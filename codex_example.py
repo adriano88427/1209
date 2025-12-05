@@ -45,7 +45,7 @@ def test_openai_client():
         print(f"初始化 OpenAI 客户端时出错: {e}")
     print()
 
-def count_tokens_from_text(text, model="gpt-4"):
+def count_tokens_from_text(text, model="gpt-5.1-codex"):
     """计算文本的 token 数量"""
     try:
         encoding = tiktoken.encoding_for_model(model)

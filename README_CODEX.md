@@ -51,7 +51,7 @@
 注意：此功能需要设置 OPENAI_API_KEY 环境变量
 
 ### 指定模型
-默认使用 gpt-4 模型，您可以通过 --model 参数指定其他模型：
+默认使用 GPT-5.1-Codex 模型，您可以通过 --model 参数指定其他模型：
 ```
 .\codex.bat count "你的文本" --model gpt-3.5-turbo
 ```

@@ -11,7 +11,7 @@ import sys
 import openai
 import tiktoken
 
-def count_tokens(text, model="gpt-4"):
+def count_tokens(text, model="gpt-5.1-codex"):
     """计算文本的 token 数量"""
     try:
         encoding = tiktoken.encoding_for_model(model)
@@ -21,7 +21,7 @@ def count_tokens(text, model="gpt-4"):
         print(f"计算 token 数量时出错: {e}")
         return None
 
-def encode_text(text, model="gpt-4"):
+def encode_text(text, model="gpt-5.1-codex"):
     """编码文本为 tokens"""
     try:
         encoding = tiktoken.encoding_for_model(model)
@@ -31,7 +31,7 @@ def encode_text(text, model="gpt-4"):
         print(f"编码文本时出错: {e}")
         return None
 
-def decode_tokens(tokens, model="gpt-4"):
+def decode_tokens(tokens, model="gpt-5.1-codex"):
     """解码 tokens 为文本"""
     try:
         encoding = tiktoken.encoding_for_model(model)
@@ -63,17 +63,17 @@ def main():
     # 计数 tokens 命令
     count_parser = subparsers.add_parser("count", help="计算文本的 token 数量")
     count_parser.add_argument("text", help="要计算的文本")
-    count_parser.add_argument("--model", default="gpt-4", help="使用的模型 (默认: gpt-4)")
+    count_parser.add_argument("--model", default="gpt-5.1-codex", help="使用的模型 (默认: gpt-5.1-codex)")
     
     # 编码命令
     encode_parser = subparsers.add_parser("encode", help="将文本编码为 tokens")
     encode_parser.add_argument("text", help="要编码的文本")
-    encode_parser.add_argument("--model", default="gpt-4", help="使用的模型 (默认: gpt-4)")
+    encode_parser.add_argument("--model", default="gpt-5.1-codex", help="使用的模型 (默认: gpt-5.1-codex)")
     
     # 解码命令
     decode_parser = subparsers.add_parser("decode", help="将 tokens 解码为文本")
     decode_parser.add_argument("tokens", nargs="+", type=int, help="要解码的 tokens (空格分隔)")
-    decode_parser.add_argument("--model", default="gpt-4", help="使用的模型 (默认: gpt-4)")
+    decode_parser.add_argument("--model", default="gpt-5.1-codex", help="使用的模型 (默认: gpt-5.1-codex)")
     
     # 列出模型命令
     subparsers.add_parser("models", help="列出可用的 OpenAI 模型")

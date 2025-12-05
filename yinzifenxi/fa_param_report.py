@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 from html import escape
 
+import numpy as np
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
@@ -23,6 +24,7 @@ from .fa_report_utils import (
     render_alert,
     render_list,
 )
+from .fa_stat_utils import calc_max_drawdown
 
 DATA_FILE_LABEL = (
     ", ".join(DEFAULT_DATA_FILES)
@@ -78,16 +80,111 @@ def _fa_generate_parameterized_report(self):
         ]
     )
 
-    positive_factors = scores_df[scores_df['因子方向'] == '正向']
-    negative_factors = scores_df[scores_df['因子方向'] == '负向']
+    def _filter_by_sample(df):
+        if df is None or df.empty:
+            return df
+        if '样本数量' not in df.columns:
+            return df
+        total_series = pd.to_numeric(df.get('总样本数量'), errors='coerce')
+        sample_series = pd.to_numeric(df.get('样本数量'), errors='coerce')
+        threshold = (total_series / 10.0) - 100.0
+        threshold = threshold.fillna(0)
+        threshold = threshold.clip(lower=0)
+        mask = sample_series.isna() | (sample_series >= threshold)
+        filtered = df[mask].copy()
+        return filtered
 
+    positive_factors = _filter_by_sample(scores_df[scores_df['因子方向'] == '正向'])
+    negative_factors = _filter_by_sample(scores_df[scores_df['因子方向'] == '负向'])
+
+    def _compute_baseline_metrics(analyzer):
+        df = getattr(analyzer, 'processed_data', None)
+        if df is None or df.empty:
+            df = getattr(analyzer, 'data', None)
+        if df is None or df.empty:
+            return {}
+        if analyzer.return_col not in df.columns:
+            return {}
+        working = df.copy()
+        working[analyzer.return_col] = pd.to_numeric(working[analyzer.return_col], errors='coerce')
+        working = working.dropna(subset=[analyzer.return_col])
+        if working.empty:
+            return {}
+        signal_col = '信号日期'
+        has_signal = signal_col in working.columns
+        if has_signal:
+            working[signal_col] = pd.to_datetime(working[signal_col], errors='coerce')
+        drawdown_series = working[analyzer.return_col]
+        trade_days = len(drawdown_series.dropna())
+        start_date = end_date = None
+        if has_signal and working[signal_col].notna().any():
+            dated = working.dropna(subset=[signal_col])
+            if not dated.empty:
+                start_date = dated[signal_col].min()
+                end_date = dated[signal_col].max()
+                daily_returns = (
+                    dated.groupby(signal_col)[analyzer.return_col]
+                    .mean()
+                    .sort_index()
+                )
+                if len(daily_returns) >= 3:
+                    drawdown_series = daily_returns
+                    trade_days = len(daily_returns.dropna())
+        if isinstance(drawdown_series, pd.Series):
+            daily_returns_series = drawdown_series.dropna()
+        else:
+            daily_returns_series = pd.Series(drawdown_series).dropna()
+        trade_days = len(daily_returns_series)
+        daily_mean = daily_returns_series.mean() if trade_days > 0 else np.nan
+        daily_std = daily_returns_series.std(ddof=1) if trade_days > 1 else np.nan
+
+        observation_days = trade_days
+        if start_date is not None and end_date is not None:
+            observation_days = max((end_date - start_date).days + 1, trade_days)
+        observation_years = np.nan
+        if observation_days and observation_days > 0:
+            observation_years = max(observation_days / 252, 1 / 252)
+
+        annualized_return = np.nan
+        if trade_days > 0 and pd.notna(observation_years) and observation_years > 0:
+            clipped_returns = daily_returns_series.clip(lower=-0.99)
+            try:
+                total_return = float(np.prod(1 + clipped_returns.values) - 1)
+            except Exception:
+                total_return = np.nan
+            final_value = 1 + (total_return if not pd.isna(total_return) else 0)
+            if pd.notna(total_return) and final_value > 0:
+                try:
+                    annualized_return = final_value ** (1 / observation_years) - 1
+                except Exception:
+                    annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
+            else:
+                annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
+        else:
+            annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
+
+        if pd.notna(daily_std) and daily_std > 0 and pd.notna(daily_mean):
+            sharpe_ratio = (daily_mean / daily_std) * np.sqrt(252)
+        elif pd.notna(daily_mean):
+            sharpe_ratio = np.inf if daily_mean > 0 else 0.0
+        else:
+            sharpe_ratio = np.nan
+
+        max_drawdown = calc_max_drawdown(daily_returns_series)
+        return {
+            'annualized_return': annualized_return,
+            'sharpe_ratio': sharpe_ratio,
+            'max_drawdown': max_drawdown,
+        }
+
+    baseline_metrics = _compute_baseline_metrics(self)
     overview_cards = render_metric_cards(
         [
             ("总因子数量", str(len(self.factor_list))),
             ("有效分析因子", str(len(factor_results))),
-            ("平均年化收益率", _fmt_float(scores_df['年化收益率'].mean(), 3)),
-            ("平均年化夏普比率", _fmt_float(scores_df['年化夏普比率'].mean(), 3)),
-            ("平均最大回撤", _fmt_percent(scores_df['最大回撤'].mean(), 1)),
+            ("平均年化收益率", _fmt_float(baseline_metrics.get('annualized_return'), 3) if baseline_metrics else _fmt_float(scores_df['年化收益率'].mean(), 3)),
+            ("平均年化夏普比率", _fmt_float(baseline_metrics.get('sharpe_ratio'), 3) if baseline_metrics else _fmt_float(scores_df['年化夏普比率'].mean(), 3)),
+            ("平均最大回撤", _fmt_percent(baseline_metrics.get('max_drawdown'), 1) if baseline_metrics else _fmt_percent(scores_df['最大回撤'].mean(), 1)),
         ]
     )
     builder.add_section("整体概览", overview_cards)
@@ -184,6 +281,7 @@ def _fa_generate_parameterized_report(self):
             headers=ranking_headers,
             formatters=ranking_formatters,
             cell_classes=cell_classes or None,
+            table_class="table-compact",
         )
         best_row = ordered_df.iloc[0]
         highlight = render_alert(

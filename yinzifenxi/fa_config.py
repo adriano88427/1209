@@ -4,7 +4,7 @@
 
 import copy
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 # ============================================================
 # 分析开关：用于控制哪些分析模块会被执行。
@@ -111,6 +111,90 @@ DATA_PARSE_CONFIG: Dict[str, Any] = {
 RETURN_COLUMN = '次日开盘买入持股两日收益率'
 
 
+# IC ??????
+# - IC_MIN_SAMPLES_DAY: ?/?/????????????????????????
+# - IC_MIN_UNIQUE_DAY: ?/?/????????????????????2?
+# - IC_MIN_UNIQUE_TOTAL: ??IC??????????
+# - IC_USE_RELAXED_UNIQUE: ????????????????????5/3/2
+IC_MIN_SAMPLES_DAY: List[int] = [5, 3, 2]
+IC_MIN_UNIQUE_DAY: List[int] = [2, 2, 2]
+IC_MIN_UNIQUE_TOTAL: int = 2
+IC_USE_RELAXED_UNIQUE: bool = True
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Read a boolean flag from environment variables."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized == "":
+        return default
+    return normalized in {"1", "true", "yes", "on", "enable", "enabled"}
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer from environment variables with graceful fallback."""
+    value = os.getenv(name)
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a float from environment variables with graceful fallback."""
+    value = os.getenv(name)
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_csv_numbers(name: str, cast_func=float) -> List:
+    """
+    Parse numeric CSV-style environment variables, ignoring invalid entries.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return []
+    entries = str(value).replace(";", ",").split(",")
+    parsed: List = []
+    for entry in entries:
+        cleaned = entry.strip()
+        if not cleaned:
+            continue
+        try:
+            parsed.append(cast_func(cleaned))
+        except (TypeError, ValueError):
+            continue
+    return parsed
+
+
+def _parse_factor_rule_overrides(raw: str) -> Dict[str, str]:
+    """
+    Parse overrides of the form '因子:mode,因子2:mode' from environment variables.
+    """
+    if not raw:
+        return {}
+    overrides: Dict[str, str] = {}
+    tokens = str(raw).replace(";", ",").split(",")
+    for token in tokens:
+        chunk = token.strip()
+        if not chunk or ":" not in chunk:
+            continue
+        factor, mode = chunk.split(":", 1)
+        factor_name = factor.strip()
+        normalized_mode = mode.strip().lower()
+        if not factor_name or normalized_mode not in {"market_cap", "industry", "both", "none"}:
+            continue
+        overrides[factor_name] = normalized_mode
+    return overrides
+
+
 def _derive_factor_columns() -> List[str]:
     """根据 column_types 定义自动生成因子列列表，避免重复维护。"""
     column_types = DATA_PARSE_CONFIG.get("column_types", {}) or {}
@@ -201,7 +285,60 @@ COLUMN_ALIGNMENT_RULES: Dict[str, Dict[str, Any]] = {}
 # 需要分析的因子列（非参数 & 带参数分析都会引用）
 # 程序会自动对这些列（及收益列）尝试进行字符串/百分比到数值的转换，无需额外配置。
 FACTOR_COLUMNS = _derive_factor_columns()
-"""  """
+
+# ============================================================
+# 因子中性化配置：按照项目方案将适合的因子映射到市值/行业/双重中性化
+# ============================================================
+FACTOR_NEUTRALIZATION_RULES: Dict[str, str] = {
+    "当日回调": "both",
+    "当日最高涨幅": "both",
+    "次日开盘涨跌幅": "both",
+    "基金持仓占比": "both",
+    "QFII持仓占比": "both",
+    "机构持股比例(%)": "industry",
+    "普通散户持股比例": "industry",
+    "财务投资机构合计（投资公司+私募+集合理财+其他理财+员工持股+信托+QFII+券商+基金）": "industry",
+    "朋友合计（企业大股东（大非）+社保+保险）": "industry",
+    "十大流通个人持股合计": "industry",
+    "高管/大股东持股比例大非": "industry",
+    "企业大股东大非（包含国资）": "industry",
+    "企业大股东（包含国资）（小非）": "industry",
+    "前10大流通股东持股比例合计": "industry",
+    "十大流通股东小非合计": "industry",
+    "十大流通股东大非合计": "industry",
+    "十大流通机构大非": "industry",
+    "十大流通机构小非": "industry",
+    "持有基金家数": "market_cap",
+    "流通市值(元)": "none",
+}
+
+_FACTOR_RULE_OVERRIDES = _parse_factor_rule_overrides(os.getenv("FA_NEUTRAL_RULES"))
+if _FACTOR_RULE_OVERRIDES:
+    _RESOLVED_NEUTRAL_RULES = copy.deepcopy(FACTOR_NEUTRALIZATION_RULES)
+    _RESOLVED_NEUTRAL_RULES.update(_FACTOR_RULE_OVERRIDES)
+else:
+    _RESOLVED_NEUTRAL_RULES = copy.deepcopy(FACTOR_NEUTRALIZATION_RULES)
+
+NEUTRALIZATION_CONFIG: Dict[str, Any] = {
+    "enabled": _env_flag("FA_NEUTRALIZATION_ENABLED", True),
+    "signal_date_column": os.getenv("FA_NEUTRAL_SIGNAL_COLUMN", "信号日期") or "信号日期",
+    "market_cap_column": os.getenv("FA_NEUTRAL_MCAP_COLUMN", "流通市值(元)") or "流通市值(元)",
+    "industry_column": os.getenv("FA_NEUTRAL_INDUSTRY_COLUMN", "所属同花顺行业") or "所属同花顺行业",
+    # 默认保留前两级行业（示例：医药生物-化学制药），满足“剔除细分第三级”的要求
+    "industry_level": max(1, _env_int("FA_NEUTRAL_INDUSTRY_LEVEL", 2)),
+    "industry_separator": os.getenv("FA_NEUTRAL_INDUSTRY_SEP", "-") or "-",
+    "min_cross_section": max(2, _env_int("FA_NEUTRAL_MIN_CROSS_SECTION", 8)),
+    "min_industry_group": max(2, _env_int("FA_NEUTRAL_MIN_INDUSTRY", 4)),
+    "store_raw_suffix": os.getenv("FA_NEUTRAL_RAW_SUFFIX", "__raw") or "__raw",
+    "default_method": (os.getenv("FA_NEUTRAL_DEFAULT_METHOD") or "none").strip().lower() or "none",
+    "factor_rules": _RESOLVED_NEUTRAL_RULES,
+    "qa_threshold": max(0.0, min(1.0, _env_float("FA_NEUTRAL_QA_THRESHOLD", 0.6))),
+    "qa_output_path": os.getenv(
+        "FA_NEUTRAL_QA_PATH",
+        os.path.join(REPORT_OUTPUT_DIR, "QA_neutralization.csv"),
+    ),
+}
+
 # =============================
 # 双因子分析配置
 # =============================
@@ -302,4 +439,40 @@ RELIABILITY_CONFIG = {
     'scale_bounds': (0.4, 1.6),
     'normalized_bounds': (0.05, 0.55),
     'drop_threshold': 0.35,
+}
+
+# =============================
+# 辅助稳健性分析配置
+# =============================
+_AUX_WINDOW_SIZES: Tuple[int, ...] = tuple(
+    int(value) for value in (_env_csv_numbers("FA_AUX_WINDOW_SIZES", int) or (30, 60))
+)
+_AUX_SAMPLE_SIZES: Tuple[float, ...] = tuple(
+    float(value) for value in (_env_csv_numbers("FA_AUX_SAMPLE_SIZES", float) or (0.8, 0.9, 1.0))
+)
+_AUX_FAST_WINDOWS: Tuple[int, ...] = tuple(
+    int(value) for value in (_env_csv_numbers("FA_AUX_FAST_WINDOWS", int) or (20, 40))
+)
+_AUX_FAST_SAMPLES: Tuple[float, ...] = tuple(
+    float(value) for value in (_env_csv_numbers("FA_AUX_FAST_SAMPLES", float) or (0.9,))
+)
+
+AUX_ANALYSIS_OPTIONS: Dict[str, Any] = {
+    "enabled": _env_flag("FA_AUX_ENABLED", True),
+    "mode": os.getenv("FA_AUX_MODE", "full") or "full",
+    "window_sizes": _AUX_WINDOW_SIZES,
+    "sample_sizes": _AUX_SAMPLE_SIZES,
+    "n_iterations": max(1, _env_int("FA_AUX_ITERATIONS", 100)),
+    "debug_enabled": _env_flag("FA_AUX_DEBUG_ENABLED", False),
+    "log_details": _env_flag("FA_AUX_LOG_DETAILS", False),
+    "cache_enabled": _env_flag("FA_AUX_CACHE_ENABLED", False),
+    "cache_dir": os.getenv(
+        "FA_AUX_CACHE_DIR",
+        os.path.join(REPORT_OUTPUT_DIR, "cache", "auxiliary"),
+    ),
+    "fast_mode_overrides": {
+        "window_sizes": _AUX_FAST_WINDOWS,
+        "sample_sizes": _AUX_FAST_SAMPLES,
+        "n_iterations": max(1, _env_int("FA_AUX_FAST_ITERATIONS", 40)),
+    },
 }

@@ -10,7 +10,13 @@ from typing import Dict, List
 
 import pandas as pd
 
-from .fa_report_utils import HTMLReportBuilder, render_metric_cards, render_table, render_alert
+from .fa_report_utils import (
+    HTMLReportBuilder,
+    build_run_metadata_section,
+    render_metric_cards,
+    render_table,
+    render_alert,
+)
 
 
 def generate_dual_nonparam_reports(results: List[Dict], report_options: Dict[str, any]) -> Dict[str, str]:
@@ -28,18 +34,26 @@ def generate_dual_nonparam_reports(results: List[Dict], report_options: Dict[str
 
     html_name = f"{prefix}分析_{timestamp}.html"
     html_path = os.path.join(output_dir, html_name)
-    html_content = _build_html_report(results, report_options, timestamp)
+    html_content = _build_html_report(summary_df, results, report_options, timestamp)
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     return {"csv_path": csv_path, "html_path": html_path}
 
 
-def _build_html_report(results: List[Dict], report_options: Dict[str, any], timestamp: str) -> str:
-    summaries = [item["summary"] for item in results]
-    df = pd.DataFrame(summaries)
+def _build_html_report(
+    summary_df: pd.DataFrame,
+    results: List[Dict],
+    report_options: Dict[str, any],
+    timestamp: str,
+) -> str:
+    df = summary_df.copy()
+    result_count = len(results)
 
     builder = HTMLReportBuilder("双因子非参数分析报告", f"生成时间 {timestamp}")
+    meta_items, run_info_html = build_run_metadata_section(report_options, result_count)
+    builder.set_meta(meta_items)
+    builder.add_section("运行与调试信息", run_info_html)
     avg_synergy = df["synergy"].mean()
     avg_ic = df["combined_ic"].mean()
     avg_long_short = df["long_short"].mean()

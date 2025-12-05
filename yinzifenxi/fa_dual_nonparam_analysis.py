@@ -8,14 +8,21 @@
 from __future__ import annotations
 
 import itertools
+import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
 from .fa_config import RETURN_COLUMN
+from .fa_logging import detect_debug_enabled
 from .fa_stat_utils import calc_max_drawdown, custom_spearman_corr
 from .fa_dual_nonparam_report import generate_dual_nonparam_reports
+
+
+def _debug(message: str):
+    if detect_debug_enabled():
+        print(f"[DEBUG][DUAL-NONPARAM] {message}")
 
 
 def run_dual_nonparam_pipeline(
@@ -27,15 +34,22 @@ def run_dual_nonparam_pipeline(
     """
     执行非参数双因子分析并生成报告。
     """
+    section_start = time.perf_counter()
     data = getattr(analyzer, "processed_data", None)
     if data is None or data.empty:
         print("[WARN] 双因子分析缺少 processed_data，已跳过")
+        elapsed = time.perf_counter() - section_start
+        print(f"[INFO][DUAL-NONPARAM] Workflow stopped after {elapsed:.2f}s due to missing data.")
         return {}
+    _debug(f"收到可用数据: {len(data)} 行 × {len(data.columns)} 列")
 
     factor_pairs = _select_factor_pairs(analyzer, dual_config)
     if not factor_pairs:
         print("[WARN] 未找到合规的双因子组合，已跳过")
+        elapsed = time.perf_counter() - section_start
+        print(f"[INFO][DUAL-NONPARAM] Workflow stopped after {elapsed:.2f}s due to empty factor pairs.")
         return {}
+    _debug(f"初始候选组合: {len(factor_pairs)} 组")
 
     min_samples = dual_config.get("min_samples", 800)
     bins = max(3, int(dual_config.get("nonparam_bins", 5)))
@@ -48,19 +62,40 @@ def run_dual_nonparam_pipeline(
         )
         if not factor_pairs:
             print("[WARN] 预筛后无可用因子对")
+            elapsed = time.perf_counter() - section_start
+            print(f"[INFO][DUAL-NONPARAM] Workflow stopped after {elapsed:.2f}s because prescreen removed all pairs.")
             return {}
+        _debug(f"预筛后剩余 {len(factor_pairs)} 组")
 
     results: List[Dict[str, Any]] = []
     for pair in factor_pairs:
         result = _analyze_factor_pair(data, pair, bins, min_samples)
         if result:
             results.append(result)
+            summary = result.get("summary", {})
+            synergy = summary.get("synergy")
+            try:
+                synergy_value = float(synergy)
+            except (TypeError, ValueError):
+                synergy_value = None
+            synergy_str = f"{synergy_value:.4f}" if synergy_value is not None and np.isfinite(synergy_value) else "N/A"
+            _debug(
+                f"{pair} 分析完成 样本={summary.get('sample_size')} synergy={synergy_str}"
+            )
+        else:
+            _debug(f"{pair} 未满足条件，跳过")
 
     if not results:
         print("[WARN] 双因子分析未产生有效结果")
+        elapsed = time.perf_counter() - section_start
+        print(f"[INFO][DUAL-NONPARAM] Workflow stopped after {elapsed:.2f}s without any valid result.")
         return {}
 
     report_paths = generate_dual_nonparam_reports(results, report_options)
+    report_paths["result_count"] = len(results)
+    duration = time.perf_counter() - section_start
+    report_paths["duration_sec"] = duration
+    print(f"[INFO][DUAL-NONPARAM] Workflow completed in {duration:.2f}s with {len(results)} results.")
     return report_paths
 
 
@@ -83,6 +118,7 @@ def _select_factor_pairs(analyzer, dual_config: Dict[str, Any]) -> List[Tuple[st
     max_pairs = max(1, int(dual_config.get("max_factor_pairs", 30)))
     if len(pairs) > max_pairs:
         pairs = pairs[:max_pairs]
+    _debug(f"因子对选择完成 (max_pairs={max_pairs}) -> {len(pairs)} 组")
     return pairs
 
 
@@ -98,9 +134,11 @@ def _prescreen_factor_pairs(
             print(f"[INFO] 双因子预筛进度 {idx + 1}/{len(factor_pairs)}")
         cols = [pair[0], pair[1], RETURN_COLUMN]
         if any(col not in df.columns for col in cols):
+            _debug(f"{pair} 缺少必要列，无法参与预筛")
             continue
         subset = df[cols].dropna()
         if len(subset) < 200:
+            _debug(f"{pair} 预筛样本不足 {len(subset)} < 200")
             continue
         ic1 = subset[pair[0]].corr(subset[RETURN_COLUMN])
         ic2 = subset[pair[1]].corr(subset[RETURN_COLUMN])
@@ -114,6 +152,7 @@ def _prescreen_factor_pairs(
         return factor_pairs[:limit]
     quick_scores.sort(key=lambda item: item[1], reverse=True)
     selected = [pair for pair, _ in quick_scores[:limit]]
+    _debug(f"预筛得分前 {limit} 组: {selected}")
     return selected
 
 
@@ -125,12 +164,15 @@ def _analyze_factor_pair(
 ) -> Optional[Dict[str, Any]]:
     """对单个因子对执行二维分组，并计算协同指标。"""
     factor_a, factor_b = pair
+    _debug(f"分析非参数组合 {pair}: bins={bins}, min_samples={min_samples}")
     required_cols = [factor_a, factor_b, RETURN_COLUMN]
     if any(col not in df.columns for col in required_cols):
+        _debug(f"{pair} 缺少必要列，跳过")
         return None
 
     subset = df[required_cols].dropna()
     if len(subset) < min_samples:
+        _debug(f"{pair} 样本不足 {len(subset)} < {min_samples}")
         return None
 
     try:
@@ -138,9 +180,11 @@ def _analyze_factor_pair(
         subset["bucket_a"] = pd.qcut(subset[factor_a], q=bins, labels=False, duplicates="drop")
         subset["bucket_b"] = pd.qcut(subset[factor_b], q=bins, labels=False, duplicates="drop")
     except ValueError:
+        _debug(f"{pair} 分箱失败，可能存在大量重复值")
         return None
 
     if subset["bucket_a"].nunique() < 2 or subset["bucket_b"].nunique() < 2:
+        _debug(f"{pair} 有效分箱数量不足，跳过")
         return None
 
     group_stats = (
@@ -171,4 +215,8 @@ def _analyze_factor_pair(
         "long_short": long_short,
         "max_drawdown": drawdown,
     }
+    _debug(
+        f"{pair} 结果: ic_a={ic_a:.4f}, ic_b={ic_b:.4f}, combined={combined_ic:.4f}, "
+        f"synergy={synergy:.4f}, samples={len(subset)}"
+    )
     return {"summary": summary, "grid": grid, "raw": group_stats}

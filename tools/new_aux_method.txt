@@ -1,0 +1,256 @@
+﻿    def generate_auxiliary_analysis_report(
+        self,
+        factors=None,
+        window_sizes=(30, 60),
+        sample_sizes=(0.8, 0.9, 1.0),
+        n_iterations=100,
+        options=None,
+    ):
+        """
+        收集滚动IC、时序稳定性与样本敏感性的统计信息。
+        结果缓存到 self.auxiliary_stats，并输出结构化摘要 CSV。
+        """
+        aux_options = options.copy() if isinstance(options, dict) else {}
+        aux_mode = str(aux_options.get("mode") or "full").strip().lower()
+        aux_enabled = bool(aux_options.get("enabled", True))
+        if not aux_enabled or aux_mode in ("skip", "off", "disabled"):
+            print(f"[INFO][AUX] Auxiliary analysis disabled via configuration (mode={aux_mode}).")
+            return {}
+        fast_mode = aux_mode == "fast"
+        if aux_options.get("window_sizes"):
+            window_sizes = tuple(aux_options["window_sizes"])
+        if aux_options.get("sample_sizes"):
+            sample_sizes = tuple(aux_options["sample_sizes"])
+        if aux_options.get("n_iterations"):
+            n_iterations = int(aux_options["n_iterations"])
+        if fast_mode:
+            fast_cfg = aux_options.get("fast_mode_overrides") or {}
+            if fast_cfg.get("window_sizes"):
+                window_sizes = tuple(fast_cfg["window_sizes"])
+            if fast_cfg.get("sample_sizes"):
+                sample_sizes = tuple(fast_cfg["sample_sizes"])
+            if fast_cfg.get("n_iterations"):
+                n_iterations = int(fast_cfg["n_iterations"])
+            else:
+                n_iterations = max(10, n_iterations // 2)
+        cache_enabled = bool(aux_options.get("cache_enabled"))
+        cache_dir = aux_options.get("cache_dir")
+        log_details = bool(aux_options.get("log_details"))
+        if cache_enabled and not cache_dir:
+            cache_enabled = False
+            if log_details:
+                print("[WARN][AUX] Cache disabled because cache_dir is undefined.")
+        if cache_enabled and cache_dir:
+            try:
+                os.makedirs(cache_dir, exist_ok=True)
+            except Exception as cache_exc:
+                print(f"[WARN][AUX] Unable to prepare auxiliary cache directory: {cache_exc}. Cache disabled.")
+                cache_enabled = False
+        cache_stats = {"hit": 0, "miss": 0, "store_fail": 0}
+        per_factor_timings = []
+        overall_start = time.perf_counter()
+
+        def _safe_average(values):
+            cleaned = []
+            for val in values:
+                if val is None:
+                    continue
+                try:
+                    if pd.isna(val):
+                        continue
+                except Exception:
+                    pass
+                try:
+                    cleaned.append(float(val))
+                except (TypeError, ValueError):
+                    continue
+            if not cleaned:
+                return None
+            return float(np.mean(cleaned))
+
+        def _summarize_auxiliary_metrics(entry):
+            metrics = {}
+            rolling_payload = entry.get('rolling') or {}
+            cv_vals, half_vals, maic_vals = [], [], []
+            for payload in rolling_payload.values():
+                stability = payload.get('stability') or {}
+                decay = payload.get('decay') or {}
+                cv_vals.append(stability.get('coefficient_of_variation'))
+                maic_vals.append(stability.get('mean_abs_ic'))
+                half_vals.append(decay.get('half_life'))
+            metrics['rolling_cv_avg'] = _safe_average(cv_vals)
+            metrics['rolling_half_life_avg'] = _safe_average(half_vals)
+            metrics['rolling_maic_avg'] = _safe_average(maic_vals)
+
+            temporal = entry.get('temporal') or {}
+            ic_stability = temporal.get('ic_stability') or {}
+            trends = temporal.get('temporal_trends') or {}
+            rank_stats = temporal.get('rank_stability') or {}
+            trend_corr = ic_stability.get('trend_correlation')
+            if trend_corr is None:
+                trend_corr = trends.get('trend_correlation')
+            metrics['temporal_autocorr_lag1'] = ic_stability.get('autocorr_lag1')
+            metrics['temporal_trend_corr'] = trend_corr
+            metrics['temporal_sign_changes'] = trends.get('sign_changes')
+            metrics['temporal_mean_reversion'] = trends.get('mean_reversion_strength')
+            metrics['temporal_rank_volatility'] = rank_stats.get('ranking_volatility')
+
+            sample = entry.get('sample') or {}
+            effects = sample.get('sample_size_effects') or {}
+            std_vals, mean_vals, success_vals = [], [], []
+            for stats in effects.values():
+                if not stats:
+                    continue
+                std_vals.append(stats.get('ic_std'))
+                mean_vals.append(stats.get('ic_mean'))
+                success_vals.append(stats.get('success_rate'))
+            metrics['sample_ic_mean_avg'] = _safe_average(mean_vals)
+            metrics['sample_ic_std_avg'] = _safe_average(std_vals)
+            metrics['sample_success_rate_avg'] = _safe_average(success_vals)
+            robustness = sample.get('robustness_metrics') or {}
+            metrics['sample_cross_variance'] = robustness.get('mean_variance_across_samples')
+            metrics['sample_best_ratio'] = robustness.get('best_sample_size')
+            metrics['sample_most_stable_ratio'] = robustness.get('most_stable_sample_size')
+
+            return metrics
+
+        def _build_score_row(factor_name, row_data, metric_summary, integrated_scores):
+            if not row_data or not integrated_scores:
+                return None
+            score_row_local = {
+                '因子': factor_name,
+                'ic_mean': row_data.get('ic_mean'),
+                'ic_std': row_data.get('ic_std'),
+                'ir': row_data.get('ir'),
+                'long_short_return': row_data.get('long_short_return'),
+                'segment_primary': row_data.get('segment_primary'),
+                'segment_primary_ratio': row_data.get('segment_primary_ratio'),
+                'segment_secondary': row_data.get('segment_secondary'),
+                'segment_secondary_ratio': row_data.get('segment_secondary_ratio'),
+                'segment_warning': row_data.get('segment_warning'),
+                'segment_primary_ic': row_data.get('segment_primary_ic'),
+                'segment_secondary_ic': row_data.get('segment_secondary_ic'),
+                'segment_recommendation': row_data.get('segment_recommendation'),
+                'daily_points': row_data.get('daily_points'),
+                'skip_ratio': row_data.get('skip_ratio'),
+                'ic_mode': row_data.get('ic_mode'),
+                'avg_daily_samples': row_data.get('avg_daily_samples'),
+                'daily_sample_cv': row_data.get('daily_sample_cv'),
+                'base_score': integrated_scores['base_score'],
+                'overall_ic': row_data.get('overall_ic'),
+                'overall_ir': row_data.get('overall_ir'),
+                'overall_p_value': row_data.get('overall_p_value'),
+                'overall_sample_size': row_data.get('overall_sample_size'),
+                'overall_score': integrated_scores['overall_score'],
+                'rolling_score': integrated_scores['rolling_score'],
+                'temporal_score': integrated_scores['temporal_score'],
+                'sample_score': integrated_scores['sample_score'],
+                'final_score': integrated_scores['final_score'],
+                'stability_score': integrated_scores['stability_score'],
+                'rating': integrated_scores['rating'],
+            }
+            if metric_summary:
+                score_row_local.update(metric_summary)
+            component_weights = integrated_scores.get('component_weights') or {}
+            reliability_scores = integrated_scores.get('reliability_scores') or {}
+            reliability_labels = integrated_scores.get('reliability_labels') or {}
+            for key in ['base', 'overall', 'rolling', 'temporal', 'sample']:
+                if key in component_weights:
+                    row_data[f'weight_{key}'] = component_weights[key]
+                    score_row_local[f'weight_{key}'] = component_weights[key]
+                if key in reliability_scores:
+                    row_data[f'reliability_{key}'] = reliability_scores[key]
+                    score_row_local[f'reliability_{key}'] = reliability_scores[key]
+                if key in reliability_labels:
+                    row_data[f'reliability_label_{key}'] = reliability_labels[key]
+                    score_row_local[f'reliability_label_{key}'] = reliability_labels[key]
+            row_data['weight_notes'] = integrated_scores.get('weight_notes')
+            score_row_local['weight_notes'] = integrated_scores.get('weight_notes')
+            return score_row_local
+
+        if not hasattr(self, 'processed_data') or self.processed_data is None:
+            print("[ERROR][AUX] Auxiliary analysis aborted: processed data is unavailable.")
+            return None
+
+        analysis_results = getattr(self, 'analysis_results', None)
+        if not analysis_results:
+            print("[ERROR][AUX] Auxiliary analysis aborted: factor analysis results missing.")
+            return None
+
+        if not isinstance(factors, (list, tuple)):
+            factors = None
+        target_factors = factors or list(analysis_results.keys()) or list(self.factors)
+        target_factors = [
+            factor for factor in target_factors
+            if factor in analysis_results and factor in self.processed_data.columns
+        ]
+        if not target_factors:
+            print("[ERROR][AUX] Auxiliary analysis aborted: no valid factors found.")
+            return None
+
+        summary_rows = []
+        auxiliary_stats = {}
+        score_rows = []
+
+        for factor in target_factors:
+            factor_start = time.perf_counter()
+            factor_result = analysis_results.get(factor, {})
+            row = None
+            aux_entry = None
+            score_row = None
+            stage_timings = {}
+            data_signature = None
+            factor_cache_hit = False
+
+            if cache_enabled:
+                data_signature = self._auxiliary_signature(factor)
+                if data_signature:
+                    cached_payload = self._load_auxiliary_cache(factor, data_signature, cache_dir, verbose=log_details)
+                else:
+                    cached_payload = None
+                if cached_payload and cached_payload.get("row") and cached_payload.get("aux_entry"):
+                    row = cached_payload.get("row")
+                    aux_entry = cached_payload.get("aux_entry")
+                    score_row = cached_payload.get("score_row")
+                    factor_cache_hit = True
+                    cache_stats["hit"] += 1
+                else:
+                    cache_stats["miss"] += 1
+
+            if not factor_cache_hit:
+                row = {
+                    '因子': factor,
+                    'ic_mean': factor_result.get('ic_mean'),
+                    'ic_std': factor_result.get('ic_std'),
+                    'ir': factor_result.get('ir'),
+                    't_stat': factor_result.get('t_stat'),
+                    'p_value': factor_result.get('p_value'),
+                    'long_short_return': (factor_result.get('group_results') or {}).get('long_short_return'),
+                }
+                extra_stats = factor_result.get('extra_stats') or {}
+                overall_metrics = extra_stats.get('overall_metrics') or {}
+                if not overall_metrics:
+                    overall_metrics = {
+                        key: extra_stats.get(key)
+                        for key in extra_stats.keys()
+                        if key.startswith('overall_')
+                    }
+
+                def _resolve_overall(field):
+                    if overall_metrics and field in overall_metrics and overall_metrics[field] is not None:
+                        return overall_metrics[field]
+                    return extra_stats.get(field)
+
+                row['overall_ic'] = _resolve_overall('overall_ic')
+                row['overall_ir'] = _resolve_overall('overall_ir')
+                row['overall_p_value'] = _resolve_overall('overall_p_value')
+                row['overall_sample_size'] = _resolve_overall('overall_sample_size')
+                row['overall_mode'] = _resolve_overall('overall_mode')
+                row['overall_t_stat'] = _resolve_overall('overall_t_stat')
+                row['overall_ci_width'] = _resolve_overall('overall_ci_width')
+
+                row['ic_mode'] = extra_stats.get('ic_mode')
+                row['ic_window_days'] = extra_stats.get('ic_window_days')
+                row['min_samples_per_day'] = extra_stats.get('min_samples_per_day')
+                row['avg_daily_samples'] = extra_stats.get('avg_daily_samples')
+                row['median_daily_samples'] = extra stats??

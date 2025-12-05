@@ -101,6 +101,7 @@ def _fa_classify_factors_by_ic(self):
         ic_mean = results.get('ic_mean', np.nan)
         ic_std = results.get('ic_std', np.nan)
         ir = results.get('ir', np.nan)
+        raw_ic_mean = results.get('raw_ic_mean', np.nan)
         p_value = results.get('p_value', np.nan)
         long_short_return = 0
         if 'group_results' in results and results['group_results'] is not None:
@@ -263,6 +264,7 @@ def _fa_classify_factors_by_ic(self):
             '因子名称': factor,
             'IC均值': ic_mean,
             'IC标准差': ic_std,
+            '原始IC均值': raw_ic_mean,
             'IR值': ir,
             'p值': p_value,
             '多空收益': long_short_return,

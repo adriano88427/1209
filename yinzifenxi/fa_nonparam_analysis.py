@@ -7,11 +7,13 @@
 
 import os
 import re
+import unicodedata
 import numpy as np
 import pandas as pd
 import scipy
+import time
 from datetime import datetime
-from typing import Sequence, Dict
+from typing import Sequence, Dict, Any, List
 
 from .excel_parser import load_excel_sources, DEFAULT_PARSE_CONFIG
 from .fa_data_validator import DataValidator
@@ -25,6 +27,11 @@ from .fa_config import (
     SEGMENT_MIN_DAILY,
     MARKET_SEGMENT_RULES,
     DATA_PARSE_CONFIG,
+    NEUTRALIZATION_CONFIG,
+    IC_MIN_SAMPLES_DAY,
+    IC_MIN_UNIQUE_DAY,
+    IC_MIN_UNIQUE_TOTAL,
+    IC_USE_RELAXED_UNIQUE,
 )
 from .fa_stat_utils import (
     ensure_list,
@@ -43,6 +50,7 @@ from .fa_stat_utils import (
     validate_annual_return_calculation,
 )
 from .excel_parser import FactorNormalizer, NormalizationInfo
+from .fa_neutralizer import FactorNeutralizer
 from .fa_nonparam_helpers import (
     _fa_classify_factors_by_ic,
     _fa_generate_factor_classification_overview,
@@ -109,7 +117,7 @@ class FactorAnalysis:
             resolved_paths = [DEFAULT_DATA_FILE]
         self.file_paths = resolved_paths
         self.file_path = self.file_paths[0] if self.file_paths else None
-        self.data = data
+        self.data = self._normalize_dataframe_columns(data) if data is not None else None
         self.factors = list(FACTOR_COLUMNS)
         self.disabled_factors = []
         self.return_col = RETURN_COLUMN
@@ -136,10 +144,61 @@ class FactorAnalysis:
             print("[INFO] 以下因子因配置被禁用: " + ", ".join(self.disabled_factors))
         self.normalizer = FactorNormalizer()
         self.normalization_stats: Dict[str, NormalizationInfo] = {}
+        self.neutralization_summary: List[Any] = []
+        self.pre_neutral_data = None
         
         # 如果没有直接传入数据且有文件路径，则加载数据
         if self.data is None and self.file_path:
             self.load_data()
+
+    @staticmethod
+    def _clean_column_name(name):
+        """规范化列名，移除隐藏字符，便于按配置映射。"""
+        if name is None:
+            return ""
+        text = str(name)
+        text = unicodedata.normalize("NFKC", text)
+        text = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+        text = "".join(ch for ch in text if unicodedata.category(ch) not in ("Cf", "Cc"))
+        return " ".join(text.split()).strip()
+
+    def _normalize_dataframe_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """根据配置列名进行清洗/去重，避免同名列追加 .1 导致缺列。"""
+        if df is None or df.empty:
+            return df
+        canonical_map = {
+            self._clean_column_name(name): name
+            for name in set(list(FACTOR_COLUMNS) + [RETURN_COLUMN])
+        }
+        rename_map = {}
+        for col in df.columns:
+            cleaned = self._clean_column_name(col)
+            canonical = canonical_map.get(cleaned)
+            rename_map[col] = canonical if canonical else (cleaned if cleaned else str(col))
+        normalized = df.rename(columns=rename_map)
+        counts: Dict[str, int] = {}
+        unique_cols: List[str] = []
+        for idx, name in enumerate(normalized.columns):
+            base = name if name else f"Unnamed_{idx+1}"
+            count = counts.get(base, 0)
+            unique_name = base if count == 0 else f"{base}.{count}"
+            counts[base] = count + 1
+            unique_cols.append(unique_name)
+        normalized.columns = unique_cols
+
+        # 将相同基名的列合并（优先首列，其余用于补全缺失值）
+        base_map: Dict[str, List[str]] = {}
+        for col in normalized.columns:
+            base = col.split(".", 1)[0]
+            base_map.setdefault(base, []).append(col)
+        for base, columns in base_map.items():
+            if len(columns) <= 1:
+                continue
+            primary = columns[0]
+            for extra in columns[1:]:
+                normalized[primary] = normalized[primary].combine_first(normalized[extra])
+                normalized.drop(columns=extra, inplace=True)
+        return normalized
 
     def _determine_market_segment(self, stock_code):
         """
@@ -164,7 +223,7 @@ class FactorAnalysis:
 
         return "其他"
 
-    def _ensure_market_segment_column(self, df):
+    def _ensure_market_segment_column(self, df, update_overview=True):
         """
         确保预处理数据中包含 market_segment 列，并统计板块样本占比。
         """
@@ -172,13 +231,15 @@ class FactorAnalysis:
             df['market_segment'] = df['股票代码'].apply(self._determine_market_segment)
         segment_counts = df['market_segment'].value_counts(dropna=False)
         total = float(len(df)) if len(df) else 1.0
-        self.segment_overview = {
+        overview = {
             seg: {
                 'count': int(count),
                 'ratio': float(count) / total if total else 0.0
             }
             for seg, count in segment_counts.items()
         }
+        if update_overview:
+            self.segment_overview = overview
         return df
     
     def _calculate_adaptive_annual_returns(self, avg_returns, characteristics, method_info):
@@ -367,7 +428,7 @@ class FactorAnalysis:
             print("[ERROR] Excel 解析结果为空，请检查数据文件内容")
             return False
 
-        self.data = parsed.data
+        self.data = self._normalize_dataframe_columns(parsed.data)
         self.parse_diagnostics = parsed.diagnostics
         self.unavailable_factors = set(parsed.unavailable_columns or [])
         self.loaded_sources = [
@@ -721,6 +782,23 @@ class FactorAnalysis:
             print(f"[ERROR] {message}")
             raise ValueError(message)
 
+    def _apply_factor_neutralization(self, df):
+        config = NEUTRALIZATION_CONFIG or {}
+        if not config.get("enabled"):
+            return df
+        active_factors = [
+            factor for factor in self.factors
+            if factor not in self.unavailable_factors and factor in df.columns
+        ]
+        if not active_factors:
+            return df
+        try:
+            neutralizer = FactorNeutralizer(config=config)
+            self.neutralization_summary = neutralizer.apply(df, active_factors)
+        except Exception as exc:  # pragma: no cover
+            print(f"[NEUTRAL][ERROR] 因子中性化处理失败: {exc}")
+        return df
+
     def preprocess_data(
         self,
         process_factors=None,
@@ -796,19 +874,26 @@ class FactorAnalysis:
                         info.semantic = "percent"
                         info.display = "ratio"
                     if info.applied_scale:
-                        print(f"[INFO] ?? '{col}' ???????: {info.applied_scale}")
+                        print(f"[INFO] \u5217 '{col}' \u5e94\u7528\u7f29\u653e: {info.applied_scale}")
                     elif info.semantic == "percent" and info.detected_percent_pattern:
-                        print(f"[INFO] ?? '{col}' ????????????????????")
+                        print(f"[INFO] \u5217 '{col}' \u672a\u8fdb\u884c\u7f29\u653e\uff0c\u53ef\u80fd\u975e\u6570\u503c\u6216\u7f3a\u5931")
                 else:
                     fallback = self._fallback_numeric_conversion(raw_series)
                     df[col] = fallback
                     self.normalization_stats[col] = info
-                    print(f"[WARN] ?? '{col}' ?????????????????")
+                    print(f"[WARN] \u5217 '{col}' \u65e0\u6cd5\u8f6c\u6362\u4e3a\u6570\u503c\uff0c\u5df2\u8df3\u8fc7")
+            neutral_cfg = NEUTRALIZATION_CONFIG or {}
+            mcap_col = neutral_cfg.get("market_cap_column")
+            raw_suffix = neutral_cfg.get("store_raw_suffix", "__raw") or "__raw"
+            if mcap_col and mcap_col in df.columns:
+                raw_col_name = f"{mcap_col}{raw_suffix}"
+                if raw_col_name not in df.columns:
+                    df[raw_col_name] = df[mcap_col]
             # 确保日期列正确处理
             if '信号日期' in df.columns:
                 try:
                     df['信号日期'] = pd.to_datetime(df['信号日期'], errors='coerce')
-                except:
+                except Exception:
                     print("警告：无法转换信号日期列")
             
             # 处理数值型因子并记录异常信息
@@ -862,10 +947,16 @@ class FactorAnalysis:
                 if process_factors:
                     print(f"  对因子 {factor} 进行 {factor_method} 处理")
                     df = self.apply_factor_processing(df, factor, factor_method, winsorize, winsorize_limits)
-            
+
+            # 记录中性化前的数据副本，用于原始IC对比
+            raw_pre_neutral_df = df.copy(deep=True)
+            df = self._apply_factor_neutralization(df)
+
             # 确保收益率列为数值型
             if not pd.api.types.is_numeric_dtype(df[self.return_col]):
                 df[self.return_col] = pd.to_numeric(df[self.return_col], errors='coerce')
+            if not pd.api.types.is_numeric_dtype(raw_pre_neutral_df[self.return_col]):
+                raw_pre_neutral_df[self.return_col] = pd.to_numeric(raw_pre_neutral_df[self.return_col], errors='coerce')
             
             # 记录收益率列的缺失值和异常值
             missing_return_count = df[self.return_col].isna().sum()
@@ -882,7 +973,9 @@ class FactorAnalysis:
             # 注意：根据用户要求，我们不删除任何数据，只记录异常信息
             # 仅删除收益率和因子列的缺失值行，以确保分析有意义的数据
             original_len = len(df)
-            df = df.dropna(subset=[self.return_col])
+            valid_mask = df[self.return_col].notna()
+            df = df.loc[valid_mask].copy()
+            raw_pre_neutral_df = raw_pre_neutral_df.loc[valid_mask].copy()
             self.anomaly_stats['missing_values']['total_removed'] = original_len - len(df)
             
             if len(df) < original_len:
@@ -899,6 +992,9 @@ class FactorAnalysis:
                 print(f"数据预处理完成：保留 {final_count}/{original_len} 行有效数据")
             
             df = self._ensure_market_segment_column(df)
+            self.pre_neutral_data = self._ensure_market_segment_column(
+                raw_pre_neutral_df, update_overview=False
+            )
             self.processed_data = df
             print(f"[INFO] 数据预处理完成：可用样本 {len(df)} 行，记录因子 {len(self.factors)} 个")
             return True
@@ -908,7 +1004,8 @@ class FactorAnalysis:
             return False
     
     def calculate_ic(self, factor_col, use_pearson=None, use_robust_corr=False, use_kendall=False,
-                     use_nonparam_test=False, compute_bootstrap_ci=False, n_bootstrap=1000):
+                     use_nonparam_test=False, compute_bootstrap_ci=False, n_bootstrap=1000,
+                     data_view='neutralized'):
         """
         计算因子IC值，支持多种稳健性统计方法
         
@@ -924,12 +1021,31 @@ class FactorAnalysis:
         Returns:
             tuple: (IC均值, IC标准差, t统计量, p值, 额外统计结果字典)
         """
+        overall_start = time.perf_counter()
+        prep_start = overall_start
         # 使用预处理后的数据，确保因子处理生效
-        df = self.processed_data if hasattr(self, 'processed_data') and self.processed_data is not None else self.data.copy()
+        view = (data_view or 'neutralized').lower()
+        df = None
+        using_raw_view = False
+        if view == 'raw':
+            if hasattr(self, 'pre_neutral_data') and getattr(self, 'pre_neutral_data', None) is not None:
+                df = self.pre_neutral_data.copy()
+                using_raw_view = True
+            else:
+                print("警告: 原始因子数据不可用，将使用中性化数据进行IC计算")
+        if df is None:
+            df = self.processed_data if hasattr(self, 'processed_data') and self.processed_data is not None else self.data.copy()
+        if df is None or df.empty:
+            print("警告: 无可用于IC计算的数据")
+            return (np.nan, np.nan, np.nan, np.nan, {})
+        update_overview = not using_raw_view
         if 'market_segment' not in df.columns:
-            df = self._ensure_market_segment_column(df)
-            if hasattr(self, 'processed_data') and self.processed_data is not None:
-                self.processed_data = df
+            df = self._ensure_market_segment_column(df, update_overview=update_overview)
+            if not using_raw_view:
+                if hasattr(self, 'processed_data') and self.processed_data is not None:
+                    self.processed_data = df
+            else:
+                self.pre_neutral_data = df
         
         # 确保数据有效
         if df.empty or factor_col not in df.columns or self.return_col not in df.columns:
@@ -939,6 +1055,100 @@ class FactorAnalysis:
         corr_type = "Pearson" if use_pearson else "Spearman"
         print(f"计算因子 {factor_col} 的 {corr_type} IC值")
         
+
+        default_sample_thresholds = [5, 3, 2]
+        default_unique_thresholds = [5, 3, 2]
+        sample_thresholds = IC_MIN_SAMPLES_DAY or default_sample_thresholds
+        unique_thresholds = IC_MIN_UNIQUE_DAY if IC_USE_RELAXED_UNIQUE else default_unique_thresholds
+        unique_total_threshold = IC_MIN_UNIQUE_TOTAL if IC_USE_RELAXED_UNIQUE else default_unique_thresholds[0]
+
+        def _pick_threshold(seq, idx, fallback):
+            try:
+                return int(seq[idx])
+            except Exception:
+                return fallback
+
+        sample_high = _pick_threshold(sample_thresholds, 0, default_sample_thresholds[0])
+        sample_mid = _pick_threshold(sample_thresholds, 1, default_sample_thresholds[1])
+        sample_low = _pick_threshold(sample_thresholds, 2, default_sample_thresholds[2])
+        unique_high = _pick_threshold(unique_thresholds, 0, default_unique_thresholds[0])
+        unique_mid = _pick_threshold(unique_thresholds, 1, default_unique_thresholds[1])
+        unique_low = _pick_threshold(unique_thresholds, 2, default_unique_thresholds[2])
+        unique_total_threshold = _pick_threshold([unique_total_threshold], 0, default_unique_thresholds[0])
+
+        quality_snapshots: List[Dict[str, Any]] = []
+
+        def _log_quality(label: str, source_df):
+            if source_df is None or getattr(source_df, 'empty', True):
+                print(f"[IC] 数据质检({label}) 因子={factor_col} 数据为空或不可用")
+                return
+            total_rows = len(source_df)
+            fac = source_df[factor_col] if factor_col in source_df.columns else None
+            ret = source_df[self.return_col] if self.return_col in source_df.columns else None
+
+            def _stat(series):
+                if series is None:
+                    return (0, 0.0, 0, 0.0, True)
+                non_null = int(series.notna().sum())
+                miss_rate = 1 - (non_null / total_rows) if total_rows > 0 else 0.0
+                uniq = int(series.nunique(dropna=True))
+                var = float(series.var(ddof=1)) if non_null > 1 else 0.0
+                approx_const = uniq <= 1 or var < 1e-12
+                return non_null, miss_rate, uniq, var, approx_const
+
+            fac_stats = _stat(fac)
+            ret_stats = _stat(ret)
+            print(
+                f"[IC] 数据质检({label}) 因子非空={fac_stats[0]} 缺失率={fac_stats[1]:.2%} 唯一值={fac_stats[2]} 方差={fac_stats[3]:.4g} 近似常数={'是' if fac_stats[4] else '否'}; "
+                f"收益非空={ret_stats[0]} 缺失率={ret_stats[1]:.2%} 唯一值={ret_stats[2]} 方差={ret_stats[3]:.4g} 近似常数={'是' if ret_stats[4] else '否'}"
+            )
+            snapshot = {
+                'label': label,
+                'factor_non_null': fac_stats[0],
+                'factor_missing_ratio': fac_stats[1],
+                'factor_unique': fac_stats[2],
+                'factor_variance': fac_stats[3],
+                'factor_approx_const': fac_stats[4],
+                'return_non_null': ret_stats[0],
+                'return_missing_ratio': ret_stats[1],
+                'return_unique': ret_stats[2],
+                'return_variance': ret_stats[3],
+                'return_approx_const': ret_stats[4],
+            }
+            quality_snapshots.append(snapshot)
+            try:
+                self.anomaly_stats['ic_calculation'].setdefault(factor_col, {}).setdefault('quality_snapshots', []).append(snapshot)
+            except Exception:
+                pass
+            if fac_stats[4] or fac_stats[1] > 0.5:
+                print(f"[WARN][IC] {label} 因子数据疑似近似常数或缺失过多")
+            if ret_stats[4] or ret_stats[1] > 0.5:
+                print(f"[WARN][IC] {label} 收益列数据疑似近似常数或缺失过多")
+
+        # 原始/中性化视图的数据质量快照
+        if not using_raw_view and hasattr(self, 'pre_neutral_data') and getattr(self, 'pre_neutral_data', None) is not None:
+            _log_quality("原始数据", self.pre_neutral_data)
+        _log_quality("当前视图", df)
+
+        print(
+            f"[IC] 阈值: 样本[{sample_high},{sample_mid},{sample_low}], 唯一值[{unique_high},{unique_mid},{unique_low}], "
+            f"方差拦截=ON, 限幅=[-0.99,0.99], 放宽唯一值={'是' if IC_USE_RELAXED_UNIQUE else '否'}"
+        )
+
+        prep_end = time.perf_counter()
+        prep_elapsed = prep_end - prep_start
+        loop_start = prep_end
+
+        clip_count = 0
+        clip_extremes = {'min_raw': None, 'max_raw': None}
+        skip_reason_counter: Dict[str, int] = {}
+
+        if '信号日期' in df.columns:
+            total_dates = int(df['信号日期'].dropna().nunique())
+            if total_dates == 0:
+                total_dates = len(df.groupby('信号日期'))
+        else:
+            total_dates = 0
         daily_sample_counts = []
         for date, group in df.groupby('信号日期'):
             valid_data = group.dropna(subset=[factor_col, self.return_col])
@@ -955,20 +1165,21 @@ class FactorAnalysis:
         top5_share = (top5 / total_sample_volume) if total_sample_volume > 0 else 0.0
 
         if avg_daily_samples >= 8:
-            min_samples_per_day = 5
+            min_samples_per_day = sample_high
             ic_window_days = 1
             mode = "高样本量模式"
+            unique_threshold_for_mode = unique_high
         elif avg_daily_samples >= 4:
-            min_samples_per_day = 3
+            min_samples_per_day = sample_mid
             ic_window_days = 2
             mode = "中样本量模式"
+            unique_threshold_for_mode = unique_mid
         else:
-            min_samples_per_day = 2
+            min_samples_per_day = sample_low
             ic_window_days = 3
             mode = "低样本量模式"
+            unique_threshold_for_mode = unique_low
 
-        total_dates = len(df['信号日期'].dropna().unique())
-        daily_ics = []
         skipped_dates = 0
         extra_stats = {
             'daily_points': 0,
@@ -991,6 +1202,7 @@ class FactorAnalysis:
             'ic_low_sample_mode': mode == "低样本量模式",
             'ic_window_note': f"{mode}, 窗口{ic_window_days}日, min样本{min_samples_per_day}",
             'daily_sample_volume': total_sample_volume,
+            'quality_snapshots': quality_snapshots,
         }
         factor_valid_df = df.dropna(subset=[factor_col, self.return_col]).copy()
         total_factor_samples = float(len(factor_valid_df))
@@ -1049,16 +1261,20 @@ class FactorAnalysis:
 
                 if local_avg_samples >= 5:
                     min_overall_samples = 25
-                    min_factor_variability = 5
-                    min_return_variability = 5
+                    min_factor_variability = unique_high
+                    min_return_variability = unique_high
                 elif local_avg_samples >= 3:
                     min_overall_samples = 15
-                    min_factor_variability = 3
-                    min_return_variability = 3
+                    min_factor_variability = unique_mid
+                    min_return_variability = unique_mid
                 else:
                     min_overall_samples = 10
-                    min_factor_variability = 2
-                    min_return_variability = 2
+                    min_factor_variability = unique_low
+                    min_return_variability = unique_low
+                min_factor_variability = max(min_factor_variability, unique_total_threshold)
+                min_return_variability = max(min_return_variability, unique_total_threshold)
+
+
 
                 if len(factor_data) < min_overall_samples:
                     if not silent:
@@ -1164,16 +1380,19 @@ class FactorAnalysis:
             'min_samples_per_day': min_samples_per_day,
             'ic_window_days': ic_window_days,
             'segment_warnings': [],
+            'quality_snapshots': quality_snapshots,
         }
 
         pending_frames = []
         pending_dates = []
+        daily_ics: List[float] = []
 
         def _record_skip(reason):
             nonlocal skipped_dates
             for dt in pending_dates or []:
                 msg = f"日期 {dt}: {reason}"
                 self.anomaly_stats['ic_calculation'][factor_col]['skipped_reasons'].append(msg)
+                skip_reason_counter[reason] = skip_reason_counter.get(reason, 0) + 1
             skipped_dates += len(pending_dates) if pending_dates else 1
 
         def _flush_pending(reason):
@@ -1184,6 +1403,7 @@ class FactorAnalysis:
             pending_dates = []
 
         def _compute_ic_from_dataframe(valid_data, date_label):
+            nonlocal clip_count
             factor_values = valid_data[factor_col]
             return_values = valid_data[self.return_col]
             factor_std = factor_values.std()
@@ -1192,14 +1412,15 @@ class FactorAnalysis:
                 return None, f"{date_label}: 标准差为零 (factor_std={factor_std:.6f}, return_std={return_std:.6f})"
 
             if avg_daily_samples >= 8:
-                min_factor_variability = 5
-                min_return_variability = 5
+                min_factor_variability = unique_high
+                min_return_variability = unique_high
             elif avg_daily_samples >= 4:
-                min_factor_variability = 3
-                min_return_variability = 3
+                min_factor_variability = unique_mid
+                min_return_variability = unique_mid
             else:
-                min_factor_variability = 2
-                min_return_variability = 2
+                min_factor_variability = unique_low
+                min_return_variability = unique_low
+
 
             factor_variability = factor_values.nunique()
             return_variability = return_values.nunique()
@@ -1227,7 +1448,13 @@ class FactorAnalysis:
             if ic_value is None or np.isnan(ic_value) or not np.isfinite(ic_value):
                 return None, f"{date_label}: 计算结果为NaN或无穷大"
             # winsor 以避免极值
+            raw_ic = float(ic_value)
             ic_value = float(np.clip(ic_value, -0.99, 0.99))
+            if ic_value != raw_ic:
+                clip_extremes['min_raw'] = raw_ic if clip_extremes['min_raw'] is None else min(clip_extremes['min_raw'], raw_ic)
+                clip_extremes['max_raw'] = raw_ic if clip_extremes['max_raw'] is None else max(clip_extremes['max_raw'], raw_ic)
+                nonlocal clip_count
+                clip_count += 1
             return ic_value, None
 
         for date, group in df.groupby('信号日期'):
@@ -1235,6 +1462,7 @@ class FactorAnalysis:
             if valid_data.empty:
                 self.anomaly_stats['ic_calculation'][factor_col]['skipped_reasons'].append(
                     f"日期 {date}: 无有效样本")
+                skip_reason_counter["无有效样本"] = skip_reason_counter.get("无有效样本", 0) + 1
                 skipped_dates += 1
                 continue
 
@@ -1263,6 +1491,9 @@ class FactorAnalysis:
         if pending_dates:
             _flush_pending("窗口结束但样本仍不足")
 
+        loop_end = time.perf_counter()
+        loop_elapsed = loop_end - loop_start
+
         daily_ics = ensure_list(daily_ics, "daily_ics")
         daily_numeric = []
         for ic in daily_ics:
@@ -1279,6 +1510,12 @@ class FactorAnalysis:
         extra_stats['qualified_day_ratio'] = (effective_dates / total_dates) if total_dates else 0.0
         self.anomaly_stats['ic_calculation'][factor_col]['skipped_dates'] = skipped_dates
         self.anomaly_stats['ic_calculation'][factor_col]['effective_dates'] = effective_dates
+        if skip_reason_counter:
+            sorted_reasons = sorted(skip_reason_counter.items(), key=lambda item: item[1], reverse=True)
+            extra_stats['skip_reason_counts'] = dict(sorted_reasons)
+            self.anomaly_stats['ic_calculation'][factor_col]['skip_reason_counts'] = dict(sorted_reasons)
+            top_reasons = ", ".join([f"{k}({v})" for k, v in sorted_reasons[:3]])
+            print(f"  [IC] 跳过原因Top: {top_reasons}")
 
         print(
             f"  [IC] 日度IC窗口结果: 有效 {effective_dates}/{total_dates}，"
@@ -1323,6 +1560,8 @@ class FactorAnalysis:
         extra_stats['segment_valid_count'] = len(segment_metrics)
         extra_stats['segment_warnings'] = segment_warnings
         self.anomaly_stats['ic_calculation'][factor_col]['segment_warnings'] = segment_warnings
+        if segment_warnings:
+            print("  [IC] 板块提示: " + "; ".join(segment_warnings))
         sorted_segments = sorted(
             extra_stats['segment_counts'].items(),
             key=lambda item: item[1].get('count', 0),
@@ -1338,6 +1577,59 @@ class FactorAnalysis:
             extra_stats['segment_secondary'] = secondary_seg
             extra_stats['segment_secondary_ratio'] = sorted_segments[1][1].get('ratio', 0.0)
             extra_stats['segment_secondary_ic'] = segment_metrics.get(secondary_seg, {}).get('overall_ic')
+
+        def _attach_raw_comparison(neutral_ic: float, target_stats: Dict[str, Any]):
+            if using_raw_view:
+                return
+            raw_df = getattr(self, 'pre_neutral_data', None)
+            if raw_df is None or getattr(raw_df, 'empty', True):
+                return
+            raw_ref = _compute_overall_reference(
+                silent=True,
+                include_diagnostics=False,
+                source_df=raw_df,
+            )
+            if raw_ref:
+                # 独立的 raw_extra_stats 记录原始视图整体指标与对比信息
+                target_stats['raw_overall_metrics'] = raw_ref
+                target_stats['raw_extra_stats'] = {'overall_metrics': raw_ref}
+                self.anomaly_stats['ic_calculation'][factor_col]['raw_extra_stats'] = {'overall_metrics': raw_ref}
+                raw_ic = raw_ref.get('overall_ic')
+                if raw_ic is None or np.isnan(raw_ic) or neutral_ic is None or np.isnan(neutral_ic):
+                    return
+                direction_flip = (np.sign(raw_ic) != np.sign(neutral_ic)) and raw_ic != 0 and neutral_ic != 0
+                magnitude_ratio = abs(neutral_ic) / abs(raw_ic) if raw_ic else np.inf
+                comparison_info = {
+                    'raw_ic': raw_ic,
+                    'neutral_ic': neutral_ic,
+                    'direction_flip': direction_flip,
+                    'magnitude_ratio': magnitude_ratio,
+                }
+                target_stats['raw_comparison'] = comparison_info
+                target_stats['raw_extra_stats']['comparison'] = comparison_info
+                self.anomaly_stats['ic_calculation'][factor_col]['raw_extra_stats']['comparison'] = comparison_info
+                if direction_flip or (np.isfinite(magnitude_ratio) and magnitude_ratio > 2):
+                    print(
+                        f"[WARN][IC] Raw vs neutral IC diverge: raw={raw_ic:.4f}, "
+                        f"neutral={neutral_ic:.4f}, ratio={magnitude_ratio:.2f}, flip={direction_flip}"
+                    )
+
+        def _finalize_stats(target_stats: Dict[str, Any]):
+            total_elapsed = time.perf_counter() - overall_start
+            diag_elapsed = max(0.0, total_elapsed - prep_elapsed - loop_elapsed)
+            target_stats['timing'] = {
+                'prep_sec': prep_elapsed,
+                'loop_sec': loop_elapsed,
+                'diag_sec': diag_elapsed,
+                'total_sec': total_elapsed,
+            }
+            target_stats['clip_count'] = clip_count
+            target_stats['clip_extremes'] = clip_extremes
+            if clip_count > 0:
+                print(
+                    f"[IC] Winsor/clip applied {clip_count} time(s); "
+                    f"raw range [{clip_extremes.get('min_raw')}, {clip_extremes.get('max_raw')}]"
+                )
 
         if len(daily_ics) >= 5 and ic_std > 0:
             t_stat = ic_mean / (ic_std / np.sqrt(len(daily_ics)))
@@ -1363,9 +1655,13 @@ class FactorAnalysis:
                     statistic='mean',
                     n_bootstrap=n_bootstrap,
                 )
+            _attach_raw_comparison(ic_mean, extra_stats)
+            _finalize_stats(extra_stats)
             return (ic_mean, ic_std, t_stat, p_value, extra_stats)
         elif daily_ics:
             print("  警告: 有效IC值数量不足或标准差为0，无法计算t统计量")
+            _attach_raw_comparison(ic_mean, extra_stats)
+            _finalize_stats(extra_stats)
             return (ic_mean, ic_std, np.nan, np.nan, extra_stats)
 
         extra_stats['fallback_reason'] = (
@@ -1379,6 +1675,8 @@ class FactorAnalysis:
             for key, value in overall_metrics.items():
                 if key.startswith('overall_'):
                     extra_stats[key] = value
+            _attach_raw_comparison(overall_metrics.get('overall_ic', np.nan), extra_stats)
+            _finalize_stats(extra_stats)
             return (
                 overall_metrics.get('overall_ic', np.nan),
                 overall_metrics.get('overall_ic_std', np.nan),
@@ -1387,6 +1685,7 @@ class FactorAnalysis:
                 extra_stats,
             )
         print("  无法计算IC值")
+        _finalize_stats(extra_stats)
         return (np.nan, np.nan, np.nan, np.nan, extra_stats)
     
     def calculate_group_returns(self, factor_col, n_groups=None):
@@ -2183,9 +2482,30 @@ class FactorAnalysis:
                 use_robust_corr=True,    # 启用稳健相关系数
                 use_kendall=True,        # 启用Kendall's Tau
                 use_nonparam_test=True,  # 启用非参数检验
-                compute_bootstrap_ci=True # 启用Bootstrap置信区间
+                compute_bootstrap_ci=True, # 启用Bootstrap置信区间
+                data_view='neutralized'
             )
-            
+
+            raw_ic_mean = np.nan
+            raw_ic_std = np.nan
+            raw_ir = np.nan
+            raw_t_stat = np.nan
+            raw_p_value = np.nan
+            raw_extra_stats = {}
+            if getattr(self, 'pre_neutral_data', None) is not None and not self.pre_neutral_data.empty:
+                print("  [原始值] 开始计算未中性化数据的IC用于对比")
+                raw_ic_mean, raw_ic_std, raw_t_stat, raw_p_value, raw_extra_stats = self.calculate_ic(
+                    factor,
+                    use_pearson=use_pearson,
+                    use_robust_corr=True,
+                    use_kendall=True,
+                    use_nonparam_test=True,
+                    compute_bootstrap_ci=True,
+                    data_view='raw'
+                )
+                if raw_ic_std is not None and not np.isnan(raw_ic_std) and raw_ic_std != 0:
+                    raw_ir = raw_ic_mean / raw_ic_std
+
             # 显示额外的统计信息
             if extra_stats:
                 print(f"  额外稳健性统计信息:")
@@ -2210,6 +2530,10 @@ class FactorAnalysis:
                     print(f"  警告: {factor} 的IR值计算异常（可能是IC标准差为0）")
             
             print(f"IC分析结果: IC均值={ic_mean:.3f}, IR值={ir:.3f}")
+            if not np.isnan(raw_ic_mean):
+                raw_ic_display = f"{raw_ic_mean:.3f}" if not np.isnan(raw_ic_mean) else "nan"
+                raw_ir_display = f"{raw_ir:.3f}" if not np.isnan(raw_ir) else "nan"
+                print(f"[原始值] IC均值={raw_ic_display}, IR值={raw_ir_display}")
             
             # 计算分组收益
             group_results = self.calculate_group_returns(factor)
@@ -2236,8 +2560,14 @@ class FactorAnalysis:
                 'ir': ir,
                 't_stat': t_stat,
                 'p_value': p_value,
+                'raw_ic_mean': raw_ic_mean,
+                'raw_ic_std': raw_ic_std,
+                'raw_ir': raw_ir,
+                'raw_t_stat': raw_t_stat,
+                'raw_p_value': raw_p_value,
                 'group_results': group_results,
-                'extra_stats': extra_stats
+                'extra_stats': extra_stats,
+                'raw_extra_stats': raw_extra_stats
             }
             
             # 注释掉自动生成CSV文件的代码，将在用户选择因子后再生成
@@ -3144,11 +3474,56 @@ class FactorAnalysis:
         window_sizes=(30, 60),
         sample_sizes=(0.8, 0.9, 1.0),
         n_iterations=100,
+        options=None,
     ):
         """
         收集滚动IC、时序稳定性与样本敏感性的统计信息。
         结果缓存到 self.auxiliary_stats，并输出结构化摘要 CSV。
         """
+        aux_options = options.copy() if isinstance(options, dict) else {}
+        aux_mode = str(aux_options.get("mode") or "full").strip().lower()
+        aux_enabled = bool(aux_options.get("enabled", True))
+        if not aux_enabled or aux_mode in ("skip", "off", "disabled"):
+            print(f"[INFO][AUX] Auxiliary analysis skipped by configuration (enabled={aux_enabled}, mode={aux_mode}).")
+            return {}
+        fast_mode = aux_mode == "fast"
+        if aux_options.get("window_sizes"):
+            try:
+                window_sizes = tuple(int(val) for val in aux_options["window_sizes"])
+            except Exception:
+                pass
+        if aux_options.get("sample_sizes"):
+            try:
+                sample_sizes = tuple(float(val) for val in aux_options["sample_sizes"])
+            except Exception:
+                pass
+        if aux_options.get("n_iterations"):
+            try:
+                n_iterations = int(aux_options["n_iterations"])
+            except Exception:
+                pass
+        if fast_mode:
+            fast_cfg = aux_options.get("fast_mode_overrides") or {}
+            if fast_cfg.get("window_sizes"):
+                try:
+                    window_sizes = tuple(int(val) for val in fast_cfg["window_sizes"])
+                except Exception:
+                    pass
+            if fast_cfg.get("sample_sizes"):
+                try:
+                    sample_sizes = tuple(float(val) for val in fast_cfg["sample_sizes"])
+                except Exception:
+                    pass
+            if fast_cfg.get("n_iterations"):
+                try:
+                    n_iterations = int(fast_cfg["n_iterations"])
+                except Exception:
+                    pass
+            else:
+                n_iterations = max(10, int(n_iterations // 2)) if n_iterations else 10
+        if not n_iterations or n_iterations <= 0:
+            n_iterations = 10
+
         if not hasattr(self, 'processed_data') or self.processed_data is None:
             print("辅助分析报告生成失败：请先执行数据预处理")
             return None

@@ -125,6 +125,7 @@ def _fa_score_parameterized_factors(factor_results):
                 '平均每笔收益率': group.get('平均收益'),
                 '交易日数量': group.get('交易日数量'),
                 '样本数量': group.get('样本数量'),
+                '总样本数量': results.get('total_samples'),
                 '数据年份': group.get('数据年份'),
                 '年化收益率': ann_return,
                 '年化收益标准差': ann_std,
