@@ -1,0 +1,268 @@
+Factor analysis log - 2025-12-06 02:58:21
+============================================================
+
+[INFO] Factor analysis pipeline started
+[INFO] Log file: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\factor_analysis_log_20251206_025821.txt
+[INFO] Data load succeeded: 21041 rows, columns 63 (parsed 5 worksheets)
+[INFO] Loading data...
+[INFO] Data loaded in 0.00s. Raw sample size: 21041 rows
+[INFO] [VALIDATION] === Data integrity validation ===
+[DEBUG][DataValidator] Starting multi-sheet validation: Expected files 5 \u4e2a, parsed\u8bca\u65ad 5 \u6761
+[DEBUG][DataValidator] Aggregation finished: \u6210\u529f\u6587\u4ef6 5 \u4e2a, \u603bsamples 21041 rows, \u4f30\u7b97coverage 100.00%
+[INFO] - Expected file count: 5, Successfully read: 5, coverage: 100.0%
+[INFO] - \u5408\u5e76\u540e\u603bsamples: 21041 rows, \u4f30\u7b97\u7406\u8bbasamples: 21041 rows, coverage: 100.0%
+[INFO] - Per-file import summary:
+[INFO] - \u56de\u6d4b\u8be6\u7ec6\u6570\u636e\u7ed3\u5408\u80a1\u672canalysis: \u521b\u4e1a\u677f2025.xlsx: 4623 rows, ratio 22.0% , worksheet Sheet1(4623)
+[INFO] - \u56de\u6d4b\u8be6\u7ec6\u6570\u636e\u7ed3\u5408\u80a1\u672canalysis: \u521b\u4e1a\u677f2024.xlsx: 5711 rows, ratio 27.1% , worksheet Sheet1(5711)
+[INFO] - \u56de\u6d4b\u8be6\u7ec6\u6570\u636e\u7ed3\u5408\u80a1\u672canalysis: \u521b\u4e1a\u677f2023.xlsx: 3024 rows, ratio 14.4% , worksheet Sheet1(3024)
+[INFO] - \u56de\u6d4b\u8be6\u7ec6\u6570\u636e\u7ed3\u5408\u80a1\u672canalysis: \u521b\u4e1a\u677f2022.xlsx: 3014 rows, ratio 14.3% , worksheet Sheet1(3014)
+[INFO] - \u56de\u6d4b\u8be6\u7ec6\u6570\u636e\u7ed3\u5408\u80a1\u672canalysis: \u521b\u4e1a\u677f2021.xlsx: 4669 rows, ratio 22.2% , worksheet Sheet1(4669)
+[INFO] - Covered years: 2021, 2022, 2023, 2024, 2025 (\u5171 5 \u5e74), Covered trading days 1148 \u5929
+[DEBUG][DataValidator] Year coverage check: detected 5 \u4e2a\u5e74\u4efd\u8bb0\u5f55
+[INFO] - \u5217\u503c\u4e00\u81f4\u6027\u68c0\u67e5
+[INFO] - No column alignment rules are configured
+[DEBUG][DataValidator] Column alignment check passed
+[INFO] [VALIDATION] Data validation passed
+[DEBUG][DataValidator] Multi-sheet validation completed: \u72b6\u6001 PASS
+[INFO] === Data Preprocessing ===
+[NEUTRAL][INFO] \u5f53\u65e5\u56de\u8c03 - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 11.87s, market 1.73s, industry 10.14s]
+[NEUTRAL][INFO] \u673a\u6784\u6301\u80a1\u6bd4\u4f8b(%) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.23s, industry 10.23s]
+[NEUTRAL][INFO] \u8d22\u52a1\u6295\u8d44\u673a\u6784\u5408\u8ba1(\u6295\u8d44\u516c\u53f8+\u79c1\u52df+\u96c6\u5408\u7406\u8d22+\u5176\u4ed6\u7406\u8d22+\u5458\u5de5\u6301\u80a1+\u4fe1\u6258+QFII+\u5238\u5546+\u57fa\u91d1) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.69s, industry 10.69s]
+[NEUTRAL][INFO] \u670b\u53cb\u5408\u8ba1(\u4f01\u4e1a\u5927\u80a1\u4e1c(\u5927\u975e)+\u793e\u4fdd+\u4fdd\u9669) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.01s, industry 10.01s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u4e2a\u4eba\u6301\u80a1\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.81s, industry 9.81s]
+[NEUTRAL][INFO] \u9ad8\u7ba1/\u5927\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5927\u975e - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.79s, industry 9.79s]
+[NEUTRAL][INFO] \u666e\u901a\u6563\u6237\u6301\u80a1\u6bd4\u4f8b - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.76s, industry 9.76s]
+[NEUTRAL][INFO] \u4f01\u4e1a\u5927\u80a1\u4e1c\u5927\u975e(\u5305\u542b\u56fd\u8d44) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.73s, industry 9.73s]
+[NEUTRAL][INFO] \u4f01\u4e1a\u5927\u80a1\u4e1c(\u5305\u542b\u56fd\u8d44)(\u5c0f\u975e) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.24s, industry 9.24s]
+[NEUTRAL][INFO] \u524d10\u5927\u6d41\u901a\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.85s, industry 9.85s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5c0f\u975e\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.63s, industry 9.63s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5927\u975e\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.91s, industry 9.91s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u673a\u6784\u5927\u975e - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.25s, industry 10.25s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u673a\u6784\u5c0f\u975e - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.17s, industry 10.17s]
+[NEUTRAL][INFO] \u57fa\u91d1\u6301\u4ed3ratio - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 11.42s, market 1.58s, industry 9.85s]
+[NEUTRAL][INFO] QFII\u6301\u4ed3ratio - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 12.32s, market 1.90s, industry 10.42s]
+[NEUTRAL][INFO] \u6301\u6709\u57fa\u91d1\u5bb6\u6570 - mode market_cap, coverage 100.0% (market rows: 21033, industry rows: 0) [total 1.68s, market 1.68s]
+[NEUTRAL][INFO] \u5f53\u65e5\u6700\u9ad8\u6da8\u5e45 - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 14.29s, market 1.81s, industry 12.48s]
+[NEUTRAL][INFO] \u6b21\u65e5\u5f00\u76d8\u6da8\u8dcc\u5e45 - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 13.13s, market 1.86s, industry 11.27s]
+[NEUTRAL][INFO] neutralized 19 factors in 193.84s (signal groups: 1148)
+[INFO] Data preprocessing complete: usable samples 21036 rows, factors 20 \u4e2a
+[INFO] Data preprocessing complete in 194.89s. Remaining samples: 21036 rows
+[INFO] Sample coverage validation complete in 0.24s.
+[INFO] === Factor Analysis Options ===
+[INFO] Available factors:
+[INFO] Running full factor analysis...
+[NEUTRAL][INFO] \u5f53\u65e5\u56de\u8c03 - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 11.98s, market 1.84s, industry 10.15s]
+[NEUTRAL][INFO] \u673a\u6784\u6301\u80a1\u6bd4\u4f8b(%) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 11.24s, industry 11.24s]
+[NEUTRAL][INFO] \u8d22\u52a1\u6295\u8d44\u673a\u6784\u5408\u8ba1(\u6295\u8d44\u516c\u53f8+\u79c1\u52df+\u96c6\u5408\u7406\u8d22+\u5176\u4ed6\u7406\u8d22+\u5458\u5de5\u6301\u80a1+\u4fe1\u6258+QFII+\u5238\u5546+\u57fa\u91d1) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.57s, industry 10.57s]
+[NEUTRAL][INFO] \u670b\u53cb\u5408\u8ba1(\u4f01\u4e1a\u5927\u80a1\u4e1c(\u5927\u975e)+\u793e\u4fdd+\u4fdd\u9669) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 11.07s, industry 11.07s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u4e2a\u4eba\u6301\u80a1\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.09s, industry 10.09s]
+[NEUTRAL][INFO] \u9ad8\u7ba1/\u5927\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5927\u975e - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.05s, industry 10.05s]
+[NEUTRAL][INFO] \u666e\u901a\u6563\u6237\u6301\u80a1\u6bd4\u4f8b - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.73s, industry 10.73s]
+[NEUTRAL][INFO] \u4f01\u4e1a\u5927\u80a1\u4e1c\u5927\u975e(\u5305\u542b\u56fd\u8d44) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.94s, industry 9.94s]
+[NEUTRAL][INFO] \u4f01\u4e1a\u5927\u80a1\u4e1c(\u5305\u542b\u56fd\u8d44)(\u5c0f\u975e) - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.45s, industry 10.45s]
+[NEUTRAL][INFO] \u524d10\u5927\u6d41\u901a\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 11.22s, industry 11.22s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5c0f\u975e\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 10.67s, industry 10.67s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5927\u975e\u5408\u8ba1 - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.96s, industry 9.96s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u673a\u6784\u5927\u975e - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.93s, industry 9.93s]
+[NEUTRAL][INFO] \u5341\u5927\u6d41\u901a\u673a\u6784\u5c0f\u975e - mode industry, coverage 100.0% (market rows: 0, industry rows: 21037) [total 9.97s, industry 9.97s]
+[NEUTRAL][INFO] \u57fa\u91d1\u6301\u4ed3ratio - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 11.64s, market 1.68s, industry 9.96s]
+[NEUTRAL][INFO] QFII\u6301\u4ed3ratio - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 12.56s, market 1.80s, industry 10.76s]
+[NEUTRAL][INFO] \u6301\u6709\u57fa\u91d1\u5bb6\u6570 - mode market_cap, coverage 100.0% (market rows: 21033, industry rows: 0) [total 1.61s, market 1.61s]
+[NEUTRAL][INFO] \u5f53\u65e5\u6700\u9ad8\u6da8\u5e45 - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 11.56s, market 1.54s, industry 10.02s]
+[NEUTRAL][INFO] \u6b21\u65e5\u5f00\u76d8\u6da8\u8dcc\u5e45 - mode both, coverage 100.0% (market rows: 21033, industry rows: 21033) [total 11.90s, market 1.68s, industry 10.22s]
+[NEUTRAL][INFO] neutralized 19 factors in 199.90s (signal groups: 1148)
+[INFO] Data preprocessing complete: usable samples 21036 rows, factors 20 \u4e2a
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[OK] \u9009\u62e9: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u636e\u8d28\u91cf\u5f97\u5206: 0.70)
+[OK] \u6570\u636e\u8d28\u91cf\u8bc4\u4f30...
+[OK] \u81ea\u9002\u5e94\u5e74\u5316\u8ba1\u7b97completed
+[INFO] \u4e3b\u8981\u65b9\u6cd5: \u6807\u51c6\u590d\u5229\u5e74\u5316(\u6570\u5b66\u6700\u4e25\u8c28)
+[INFO] \u5bf9\u6bd4\u65b9\u6cd5: CAGR\u590d\u5408\u5e74\u5316(\u9a8c\u8bc1\u4e00\u81f4\u6027)
+[INFO] \u9a8c\u8bc1\u673a\u5236: \u53cd\u5411\u8ba1\u7b97\u9a8c\u8bc1\u7ed3\u679c\u51c6\u786e\u6027
+[OK] \u4e24\u79cd\u65b9\u6cd5\u7ed3\u679c\u4e00\u81f4, \u9a8c\u8bc1\u901a\u8fc7
+[INFO] Factor analysis core computation took 315.54s with 20 factor results
+[INFO] Integrating auxiliary robustness statistics...
+[OK] \u8f85\u52a9analysis\u6458\u8981\u5df2\u8ba1\u7b97(\u4e0d\u518d\u5355\u72ec\u5bfc\u51faCSV)
+[OK] \u8f85\u52a9\u7a33\u5065\u6027\u8bc4\u5206\u6458\u8981\u5df2\u8ba1\u7b97(\u4e0d\u518d\u5355\u72ec\u5bfc\u51faCSV)
+[OK] \u8f85\u52a9analysis\u6570\u636e\u5df2\u7f13\u5b58, \u53ef\u5728report\u548c\u8bc4\u5206\u4e2d\u4f7f\u7528
+[INFO] Auxiliary robustness statistics merged successfully in 340.42s
+[INFO] Summary dataframe generated in 0.06s
+[INFO] Main single-factor report generated in 0.08s
+[INFO] Factor analysis stage ended in 656.11s.
+[INFO] Running 10-bucket grouped analysis for every factor...
+[STEP] Analyzing factor: \u5f53\u65e5\u56de\u8c03
+[STEP] Analyzing factor: \u673a\u6784\u6301\u80a1\u6bd4\u4f8b(%)
+[STEP] Analyzing factor: \u6d41\u901a\u5e02\u503c(\u5143)
+[STEP] Analyzing factor: \u8d22\u52a1\u6295\u8d44\u673a\u6784\u5408\u8ba1(\u6295\u8d44\u516c\u53f8+\u79c1\u52df+\u96c6\u5408\u7406\u8d22+\u5176\u4ed6\u7406\u8d22+\u5458\u5de5\u6301\u80a1+\u4fe1\u6258+QFII+\u5238\u5546+\u57fa\u91d1)
+[STEP] Analyzing factor: \u670b\u53cb\u5408\u8ba1(\u4f01\u4e1a\u5927\u80a1\u4e1c(\u5927\u975e)+\u793e\u4fdd+\u4fdd\u9669)
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u4e2a\u4eba\u6301\u80a1\u5408\u8ba1
+[STEP] Analyzing factor: \u9ad8\u7ba1/\u5927\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5927\u975e
+[STEP] Analyzing factor: \u666e\u901a\u6563\u6237\u6301\u80a1\u6bd4\u4f8b
+[STEP] Analyzing factor: \u4f01\u4e1a\u5927\u80a1\u4e1c\u5927\u975e(\u5305\u542b\u56fd\u8d44)
+[STEP] Analyzing factor: \u4f01\u4e1a\u5927\u80a1\u4e1c(\u5305\u542b\u56fd\u8d44)(\u5c0f\u975e)
+[STEP] Analyzing factor: \u524d10\u5927\u6d41\u901a\u80a1\u4e1c\u6301\u80a1\u6bd4\u4f8b\u5408\u8ba1
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5c0f\u975e\u5408\u8ba1
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u80a1\u4e1c\u5927\u975e\u5408\u8ba1
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u673a\u6784\u5927\u975e
+[STEP] Analyzing factor: \u5341\u5927\u6d41\u901a\u673a\u6784\u5c0f\u975e
+[STEP] Analyzing factor: \u57fa\u91d1\u6301\u4ed3ratio
+[STEP] Analyzing factor: QFII\u6301\u4ed3ratio
+[STEP] Analyzing factor: \u6301\u6709\u57fa\u91d1\u5bb6\u6570
+[STEP] Analyzing factor: \u5f53\u65e5\u6700\u9ad8\u6da8\u5e45
+[STEP] Analyzing factor: \u6b21\u65e5\u5f00\u76d8\u6da8\u8dcc\u5e45
+[INFO] Grouped factor walkthrough completed in 0.28s.
+[INFO] === Factor analysis results saved ===
+[INFO] Generating parameterized factor summary report...
+[INFO] === ??????? ===
+[INFO] \u5df2generated\u5e26\u9ad8\u4eae\u7684Excel: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u5e26\u53c2\u6570factoranalysis\u6570\u636e_20251206_031251.xlsx
+[OK] Parameterized factor HTML report generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u5e26\u53c2\u6570factor\u7efc\u5408analysisreport_20251206_031251.html
+[INFO] Parameterized factor stage finished in 5.68s.
+[INFO] === Dual-factor non-parametric analysis ===
+[INFO] \u53ccfactor\u9884\u7b5bprogress 1/15
+[INFO] \u53ccfactor\u9884\u7b5bprogress 11/15
+[INFO][DUAL-NONPARAM] Workflow completed in 2.08s with 15 results.
+[OK] Dual-factor non-parametric CSV generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u975e\u53c2\u6570\u6c47\u603b_20251206_031253.csv
+[OK] Dual-factor non-parametric HTML generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u975e\u53c2\u6570analysis_20251206_031253.html
+[INFO] === Dual-factor parametric analysis ===
+[INFO][DUAL-PARAM] Workflow completed in 1.50s with 15 results.
+[OK] Dual-factor parametric CSV generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u5e26\u53c2\u6570\u6c47\u603b_20251206_031254.csv
+[OK] Dual-factor parametric Excel generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u5e26\u53c2\u6570\u6570\u636e_20251206_031254.xlsx
+[OK] Dual-factor parametric HTML generated: C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\\u53ccfactor\u5e26\u53c2\u6570analysis_20251206_031254.html
+[INFO] Factor analysis program completed
+[INFO] Total runtime: 873.50s
+
+
+Log recording finished - 2025-12-06 03:12:55
+============================================================
