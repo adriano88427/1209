@@ -1,0 +1,12 @@
+# 排除目录
+baogao/
+shuju/
+
+# 其他可能不需要的文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+__pycache__/
+.venv/
+*.pyc
