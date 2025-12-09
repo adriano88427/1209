@@ -1,8 +1,8 @@
-# GitHub文件上传方案
+# GitHub项目上传与下载方案
 
 ## 方案概述
 
-基于实际操作经验，本文档提供完整的GitHub文件上传解决方案，包括网络连接问题的解决方法和多个备选方案。
+基于实际操作经验和官方文档，本文档提供完整的GitHub上传与下载解决方案，包括网络连接问题的解决方法和多个备选方案。
 
 ## 方案一：标准HTTPS连接（推荐）
 
@@ -42,26 +42,38 @@ git push origin main
 - 直接连接GitHub超时或失败
 - 需要通过代理访问GitHub
 
-### 操作步骤
+### 官方提供的方法
+
+#### 方法一：直接替换URL（推荐）
 ```bash
-# 1. 使用代理URL克隆仓库
+# 直接使用gitclone.com URL进行克隆
 git clone https://gitclone.com/github.com/user/repo.git
+```
 
-# 2. 进入目录
-cd repo
+#### 方法二：设置Git全局参数
+```bash
+# 配置全局代理（对所有GitHub操作生效）
+git config --global url."https://gitclone.com/".insteadOf https://
 
-# 3. 修改远程仓库地址为原始GitHub地址
+# 然后正常使用GitHub URL（会自动替换为代理）
+git clone https://github.com/user/repo.git
+
+# 推送时恢复正常
 git remote set-url origin https://github.com/user/repo.git
-
-# 4. 后续操作同标准流程
-git add .
-git commit -m "Add project files"
 git push origin main
 ```
 
-### 注意事项
-- 代理URL仅用于克隆，后续推送需要正常网络连接
-- 如果推送仍然失败，可临时将远程地址改为代理地址进行只读操作
+#### 方法三：使用cgit客户端
+```bash
+# 使用cgit客户端（自动处理代理）
+cgit clone https://github.com/user/repo.git
+```
+
+### 重要说明
+- **gitclone.com仅支持读取操作**：只能用于clone和fetch，**不支持push操作**
+- **推送时必须使用原始GitHub地址**：完成开发后需要将远程URL改回原始GitHub地址
+- **不需要登录**：gitclone.com是公开的代理服务，任何人都可以直接使用
+- **网络问题**：如果原始GitHub地址无法访问，可以先用gitclone.com克隆，然后等网络恢复后再推送
 
 ## 方案三：github.com.cnpmjs.org镜像（只读场景）
 
@@ -84,6 +96,90 @@ git clone https://github.com.cnpmjs.org/user/repo.git
 ### 注意事项
 - 如果需要完整的GitHub操作（提交代码、创建PR等），建议使用SSH连接或配置本地代理
 - 镜像站点内容更新可能不及时，如需最新代码建议直接连接GitHub
+
+## 方案四：SSH连接（推荐开发者）
+
+### 适用场景
+- 需要频繁与GitHub交互
+- 不想输入用户名密码
+- 开发者常用方式
+
+### 操作步骤
+```bash
+# 1. 生成SSH密钥（如果还没有）
+ssh-keygen -t ed25519 -C "your.email@example.com"
+
+# 2. 添加SSH密钥到ssh-agent
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+
+# 3. 将公钥添加到GitHub账户
+# 复制公钥内容：cat ~/.ssh/id_ed25519.pub
+# 在GitHub > Settings > SSH and GPG keys 中添加
+
+# 4. 克隆仓库
+git clone git@github.com:user/repo.git
+
+# 5. 后续操作相同
+cd repo
+git add .
+git commit -m "Add project files"
+git push origin main
+```
+
+### 优势
+- 不需要每次输入密码
+- 更安全的认证方式
+- 支持完整的Git操作
+
+## 方案五：GitHub Desktop（图形界面）
+
+### 适用场景
+- 不熟悉命令行操作
+- 偏好图形界面
+- 简单项目管理
+
+### 操作步骤
+1. 下载并安装GitHub Desktop
+2. 登录GitHub账户
+3. 克隆仓库或创建新仓库
+4. 通过拖拽方式添加文件
+5. 提交并推送更改
+
+### 优势
+- 图形界面操作直观
+- 内置冲突解决工具
+- 实时查看更改
+
+## 方案六：VS Code集成
+
+### 适用场景
+- 使用VS Code作为主要编辑器
+- 需要集成开发环境
+
+### 操作步骤
+```bash
+# 1. 安装GitLens扩展
+# 2. 在VS Code中打开文件夹
+# 3. 使用内置Git工具
+#   - 源代码管理面板
+#   - 状态栏Git信息
+#   - 内置冲突解决
+```
+
+## 其他代理服务
+
+### FastGit镜像
+```bash
+# 替换URL中的github.com为hub.fastgit.xyz
+git clone https://hub.fastgit.xyz/user/repo.git
+```
+
+### GitCode镜像
+```bash
+# 中国区用户常用
+git clone https://gitcode.net/user/repo.git
+```
 
 ## 常见问题解决
 
@@ -199,6 +295,8 @@ pwsh.exe -c "git config --global http.sslVerify false"
 1. **网络正常** → 使用方案一（标准HTTPS）
 2. **网络受限** → 使用方案二（gitclone.com代理）
 3. **仅需读取** → 使用方案三（cnpmjs.org镜像）
+4. **日常开发** → 使用方案四（SSH连接）
+5. **新手用户** → 使用方案五（GitHub Desktop）
 
 **推荐流程**：
 1. 先尝试标准HTTPS连接
@@ -215,6 +313,7 @@ pwsh.exe -c "git config --global http.sslVerify false"
 git clone https://github.com/user/repo.git                    # 标准方式
 git clone https://gitclone.com/github.com/user/repo.git       # 代理方式
 git clone https://github.com.cnpmjs.org/user/repo.git         # 镜像方式
+git config --global url."https://gitclone.com/".insteadOf https://  # 全局代理
 
 # 常用操作
 git status                    # 查看状态
@@ -225,8 +324,12 @@ git pull origin main          # 拉取最新更改
 
 # 解决冲突
 git pull origin main --allow-unrelated-histories  # 允许无关历史合并
+
+# Git全局代理配置
+git config --global url."https://gitclone.com/".insteadOf https://  # 启用代理
+git config --global --unset url."https://gitclone.com/".insteadOf   # 禁用代理
 ```
 
 ---
 *创建时间：2025-12-09*
-*基于实际GitHub文件上传操作经验编写*
+*基于实际GitHub文件上传操作经验和官方文档编写*
