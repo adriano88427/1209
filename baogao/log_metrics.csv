@@ -1,3 +1,0 @@
-﻿timestamp,pipeline,result_count,duration_sec,csv_path,html_path,excel_path,log_file,debug_dump_path,debug_enabled
-2025-12-06 03:12:53,dual_nonparam,15,2.0771,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\双因子非参数汇总_20251206_031253.csv,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\双因子非参数分析_20251206_031253.html,,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\factor_analysis_log_20251206_025821.txt,,0
-2025-12-06 03:12:55,dual_param,15,1.4968,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\双因子带参数汇总_20251206_031254.csv,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\双因子带参数分析_20251206_031254.html,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\双因子带参数数据_20251206_031254.xlsx,C:\Users\lenovo\Documents\yinzifenxi\1205\baogao\factor_analysis_log_20251206_025821.txt,,0
