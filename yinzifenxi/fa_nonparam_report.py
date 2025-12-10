@@ -18,6 +18,7 @@ from .fa_report_utils import (
     render_alert,
     render_text_block,
     render_table,
+    render_report_notes,
 )
 
 DATA_FILE_LABEL = (
@@ -132,7 +133,7 @@ def _fa_generate_summary_report(self):
     summary_df_rounded = summary_df.round(3)
     # 添加时间戳到文件名，但避免使用可能导致特定格式报告的命名
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f'因子分析汇总_{timestamp}.csv'  # 修改文件名格式，避免生成'因子分析报告_当日回调_时间戳.csv'
+    filename = f'单因子分析汇总_{timestamp}.csv'  # 修改文件名格式，避免生成'因子分析报告_当日回调_时间戳.csv'
     file_path = build_report_path(filename)
     summary_df_rounded.to_csv(file_path, index=False, encoding='utf-8-sig')
     print(f"\n汇总报告已保存到 '{file_path}'")
@@ -151,7 +152,7 @@ def _fa_generate_factor_analysis_report(self, summary_df, process_factors=False,
         winsorize: 是否进行缩尾
     """
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    report_filename = f'因子分析详情_精简版_{timestamp}.html'
+    report_filename = f'单因子分析_{timestamp}.html'
     report_path = build_report_path(report_filename)
 
     builder = HTMLReportBuilder("因子分析详细报告", "摘要模式" if summary_mode else "完整报告")
@@ -273,6 +274,8 @@ def _fa_generate_factor_analysis_report(self, summary_df, process_factors=False,
         + f"<div class='details-block'><details><summary>查看文字版诊断</summary>{render_text_block(negative_analysis)}</details></div>"
     )
     builder.add_section("评分标准说明", render_text_block(scoring_standards))
+
+    builder.add_section("报告说明", render_report_notes())
 
     html_content = builder.render()
     try:

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-带参数因子分析报告模块。
+带参数的单因子分析（10等分）报告模块。
 
-该模块承载 ParameterizedFactorAnalyzer 生成 TXT/CSV 报告的逻辑，
+该模块承载 ParameterizedFactorAnalyzer 生成 HTML/Excel 报告的逻辑，
 主类只需调用公开函数即可，避免大段字符串常量留在主脚本中。
 """
 
@@ -23,6 +23,7 @@ from .fa_report_utils import (
     render_table,
     render_alert,
     render_list,
+    render_report_notes,
 )
 from .fa_stat_utils import calc_max_drawdown
 
@@ -52,9 +53,10 @@ def _fmt_score(value):
 
 
 def _fa_generate_parameterized_report(self):
-    """生成带参数因子综合分析报告并输出所有相关文件。"""
-    print("开始生成带参数因子综合分析报告...")
+    """生成带参数的单因子分析（10等分）报告并输出所有相关文件。"""
+    print("开始生成带参数的单因子分析（10等分）报告...")
 
+    baseline_metrics = {}  # 提前初始化，防止异常时未赋值
     factor_results = {}
     for factor in self.factor_list:
         print(f"分析因子: {factor}")
@@ -63,15 +65,16 @@ def _fa_generate_parameterized_report(self):
             factor_results[factor] = results
 
     if not factor_results:
-        print("错误: 没有有效的带参数因子分析结果")
+        print("错误: 没有有效的带参数的单因子分析结果")
         return None
 
     scores_df = self.score_factors(factor_results)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    report_filename = f'带参数因子综合分析报告_{timestamp}.html'
+    prefix = '带参数的单因子分析（10等分）'
+    report_filename = f'{prefix}_{timestamp}.html'
     report_path = build_report_path(report_filename)
 
-    builder = HTMLReportBuilder("带参数因子综合分析详细报告")
+    builder = HTMLReportBuilder("带参数的单因子分析（10等分）报告")
     builder.set_meta(
         [
             ("生成时间", datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
@@ -97,6 +100,14 @@ def _fa_generate_parameterized_report(self):
     positive_factors = _filter_by_sample(scores_df[scores_df['因子方向'] == '正向'])
     negative_factors = _filter_by_sample(scores_df[scores_df['因子方向'] == '负向'])
 
+    # 正向榜单：仅保留年化收益率 > 整体年化收益率(全样本) * 1.1 的区间
+    baseline_return = None
+    if baseline_metrics:
+        baseline_return = baseline_metrics.get('annualized_return')
+    if baseline_return is not None and pd.notna(baseline_return):
+        threshold = baseline_return * 1.1
+        positive_factors = positive_factors[positive_factors['年化收益率'] > threshold]
+
     def _compute_baseline_metrics(analyzer):
         df = getattr(analyzer, 'processed_data', None)
         if df is None or df.empty:
@@ -110,58 +121,14 @@ def _fa_generate_parameterized_report(self):
         working = working.dropna(subset=[analyzer.return_col])
         if working.empty:
             return {}
-        signal_col = '信号日期'
-        has_signal = signal_col in working.columns
-        if has_signal:
-            working[signal_col] = pd.to_datetime(working[signal_col], errors='coerce')
-        drawdown_series = working[analyzer.return_col]
-        trade_days = len(drawdown_series.dropna())
-        start_date = end_date = None
-        if has_signal and working[signal_col].notna().any():
-            dated = working.dropna(subset=[signal_col])
-            if not dated.empty:
-                start_date = dated[signal_col].min()
-                end_date = dated[signal_col].max()
-                daily_returns = (
-                    dated.groupby(signal_col)[analyzer.return_col]
-                    .mean()
-                    .sort_index()
-                )
-                if len(daily_returns) >= 3:
-                    drawdown_series = daily_returns
-                    trade_days = len(daily_returns.dropna())
-        if isinstance(drawdown_series, pd.Series):
-            daily_returns_series = drawdown_series.dropna()
-        else:
-            daily_returns_series = pd.Series(drawdown_series).dropna()
+        # 与自由区间榜单保持一致：按样本级日均收益计算，不再按信号日聚合。
+        daily_returns_series = working[analyzer.return_col].dropna()
         trade_days = len(daily_returns_series)
         daily_mean = daily_returns_series.mean() if trade_days > 0 else np.nan
         daily_std = daily_returns_series.std(ddof=1) if trade_days > 1 else np.nan
 
-        observation_days = trade_days
-        if start_date is not None and end_date is not None:
-            observation_days = max((end_date - start_date).days + 1, trade_days)
-        observation_years = np.nan
-        if observation_days and observation_days > 0:
-            observation_years = max(observation_days / 252, 1 / 252)
-
-        annualized_return = np.nan
-        if trade_days > 0 and pd.notna(observation_years) and observation_years > 0:
-            clipped_returns = daily_returns_series.clip(lower=-0.99)
-            try:
-                total_return = float(np.prod(1 + clipped_returns.values) - 1)
-            except Exception:
-                total_return = np.nan
-            final_value = 1 + (total_return if not pd.isna(total_return) else 0)
-            if pd.notna(total_return) and final_value > 0:
-                try:
-                    annualized_return = final_value ** (1 / observation_years) - 1
-                except Exception:
-                    annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
-            else:
-                annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
-        else:
-            annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
+        # 与排行榜口径保持一致：使用日均收益 * 252 年化估计，不做复利，避免偏离分档/区间的算法。
+        annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
 
         if pd.notna(daily_std) and daily_std > 0 and pd.notna(daily_mean):
             sharpe_ratio = (daily_mean / daily_std) * np.sqrt(252)
@@ -177,14 +144,17 @@ def _fa_generate_parameterized_report(self):
             'max_drawdown': max_drawdown,
         }
 
-    baseline_metrics = _compute_baseline_metrics(self)
+    try:
+        baseline_metrics = _compute_baseline_metrics(self)
+    except Exception as exc:
+        print(f"[ERROR] 基线指标计算失败，使用空结果，原因: {exc}")
     overview_cards = render_metric_cards(
         [
+            ("整体年化收益率(全样本)", _fmt_percent(baseline_metrics.get('annualized_return'), 2) if baseline_metrics else _fmt_percent(scores_df['年化收益率'].mean(), 2)),
+            ("整体最大回撤(全样本)", _fmt_percent(baseline_metrics.get('max_drawdown'), 1) if baseline_metrics else _fmt_percent(scores_df['最大回撤'].mean(), 1)),
+            ("样本中位数", _fmt_float(scores_df['样本数量'].median(), 1) if not scores_df.empty else "--"),
             ("总因子数量", str(len(self.factor_list))),
             ("有效分析因子", str(len(factor_results))),
-            ("平均年化收益率", _fmt_float(baseline_metrics.get('annualized_return'), 3) if baseline_metrics else _fmt_float(scores_df['年化收益率'].mean(), 3)),
-            ("平均年化夏普比率", _fmt_float(baseline_metrics.get('sharpe_ratio'), 3) if baseline_metrics else _fmt_float(scores_df['年化夏普比率'].mean(), 3)),
-            ("平均最大回撤", _fmt_percent(baseline_metrics.get('max_drawdown'), 1) if baseline_metrics else _fmt_percent(scores_df['最大回撤'].mean(), 1)),
         ]
     )
     builder.add_section("整体概览", overview_cards)
@@ -417,13 +387,15 @@ def _fa_generate_parameterized_report(self):
     ]
     builder.add_section("风险提示", render_list(risk_items))
 
+    builder.add_section("报告说明", render_report_notes())
+
     html_content = builder.render()
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    print(f"带参数因子综合分析报告已保存到 '{report_path}'")
+    print(f"带参数的单因子分析（10等分）报告已保存到 '{report_path}'")
 
-    data_filename = f'带参数因子分析数据_{timestamp}.xlsx'
+    data_filename = f'带参数的单因子分析（10等分）_数据_{timestamp}.xlsx'
     data_path = build_report_path(data_filename)
     scores_df.to_excel(data_path, index=False)
     print(f"详细数据已保存到 '{data_path}'")

@@ -180,6 +180,9 @@ body {
 .highlight-blue {
     background: #d7efff !important;
 }
+.highlight-yellow {
+    background: #fff4c2 !important;
+}
 .highlight-manual {
     background: #fff4c2 !important;
 }
@@ -235,6 +238,29 @@ body {
     margin: 0 0 6px 0;
     color: var(--muted);
     font-size: 13px;
+}
+.notes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 6px;
+}
+.notes-table th, .notes-table td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+    word-break: break-word;
+}
+.notes-table thead {
+    background: #f0f4ff;
+    color: #1e2430;
+    font-weight: 600;
+}
+.notes-list {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    font-size: 13px;
+    line-height: 1.6;
 }
 .tag {
     display: inline-block;
@@ -381,6 +407,73 @@ def render_metric_cards(items: Sequence[Tuple[str, str]]) -> str:
 def render_alert(text: str, level: str = "info") -> str:
     level_class = "alert-info" if level != "warn" else "alert-warn"
     return f"<div class='alert {level_class}'>{escape(text)}</div>"
+
+
+def _fmt_percent_safe(value, decimals: int = 2) -> str:
+    try:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return "--"
+        return f"{float(value):.{decimals}%}"
+    except Exception:
+        return "--"
+
+
+def _fmt_str(value, default: str = "--") -> str:
+    if value is None:
+        return default
+    try:
+        text = str(value)
+    except Exception:
+        return default
+    return text if text.strip() else default
+
+
+def render_report_notes(context: Dict[str, Any] = None) -> str:
+    """
+    渲染“报告说明”板块（静态模板，不依赖运行时数据）。
+    若算法/阈值/权重变动，需要人工同步修改此模板文案。
+    """
+    run_rows = [
+        ("日志文件", "最新运行日志位于 baogao/jianyan/，名称 factor_analysis_log_*.txt"),
+        ("调试模式", "可在运行时通过参数/环境变量开启，默认未开启"),
+        ("分档与样本", "分档/样本下限请参考配置文件 fa_config.py"),
+    ]
+    run_table = (
+        '<table class="notes-table"><thead><tr><th>项目</th><th>信息</th></tr></thead><tbody>'
+        + "".join(f"<tr><td>{escape(k)}</td><td>{escape(str(v))}</td></tr>" for k, v in run_rows)
+        + "</tbody></table>"
+    )
+
+    formulas = [
+        "年化收益率：日均收益 × 252（线性年化，不做复利）",
+        "IC 口径：Spearman（秩相关，默认）",
+        "夏普比率：日均收益 ÷ 日标准差 × sqrt(252)",
+        "最大回撤：基于日收益序列峰谷计算",
+        "平均每笔收益率：单笔收益均值",
+    ]
+
+    rule_items = [
+        "样本下限、收益/协同增益等阈值：参见 fa_config.py 的对应模块设置",
+        "用户区间：若有自定义区间，默认强制展示；若无则按样本下限过滤",
+        "展示条数：榜单一般以 Top N 展示（部分报告会倍增显示）",
+    ]
+
+    scoring_items = [
+        "评分权重：收益/夏普/回撤/样本量等指标按配置权重计算（详见 fa_config.py 或模块内说明）",
+        "排序字段：综合得分降序；若有平滑得分，会辅以提示",
+        "高亮规则：通常前 3 项蓝色，用户区间黄色，如有告警会另行标注",
+    ]
+
+    def _render_list(items):
+        return "<ul class=\"notes-list\">" + "".join(f"<li>{escape(str(it))}</li>" for it in items) + "</ul>"
+
+    sections = [
+        f"<h3>运行与调试信息</h3>{run_table}",
+        f"<h3>口径与公式</h3>{_render_list(formulas)}",
+        f"<h3>榜单/入榜规则</h3>{_render_list(rule_items)}",
+        f"<h3>评分与排名方式</h3>{_render_list(scoring_items)}",
+    ]
+    return "".join(f'<div class="sub-block">{block}</div>' for block in sections)
 
 
 def _format_cell(value) -> str:

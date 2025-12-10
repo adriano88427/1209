@@ -41,13 +41,21 @@
 - Communicate with me in Chinese at all times.
 - 当需要用户在多条执行路线中选择时，先提供专业评估后再征询选择：逐条写优点/风险/适用场景，并给出推荐（示例如容忍阈值 vs 复刻逻辑的对比）。
 - 用户是编程/数学/统计/金融的新手：对话、选项、CONFIG 注释必须更详细，避免术语堆砌，必要时给出具体评估或操作指南，遇到专业概念需额外解释。
+- 修改配置前，请先阅读仓库根目录的《项目功能与配置使用说明.md》，遵循其中的路径、开关、输出说明再操作。
+- 指标口径统一：年化收益率、夏普比率、最大回撤、平均每笔收益率等在各模块需采用一致算法；开发新模块前先阅读现有实现，保持口径一致，便于跨报告对比。
+- 报告说明栏为静态文案：当报告计算逻辑、阈值、权重或筛选规则变动时，必须同步手工更新报告尾部的说明文案，保持与实际算法一致（视同更新说明书的责任）。
 
 ## Project Structure & Module Organization
 - `yinzifenxi/`: Core factor-analysis code. `yinzifenxi_main.py` orchestrates the pipeline; `fa_nonparam_analysis.py` and `fa_param_analysis.py` handle single-factor logic; `fa_dual_*` modules cover dual-factor flows; helpers live in `fa_stat_utils.py`, `fa_nonparam_helpers.py`, and reporting utilities (HTML/CSV/Excel) are in `fa_*_report.py`.
 - `shuju/`: Data inputs. Place Excel sources under `shuju/biaoge/`; akshare caches in `shuju/ak_cache/`; intermediate dumps may go under `shuju/MEMORY/`.
-- `baogao/`: Generated outputs (CSV/Excel/HTML) and run log (`baogao/log_metrics.csv`). Keep writable; avoid committing large artifacts unless required.
+- `baogao/`: Generated outputs（按类型分类）；运行日志/指标在 `baogao/jianyan/log_metrics.csv`。Keep writable; avoid committing large artifacts unless required.
 - `tools/`: One-off utilities (column fixes, diffing outputs).
 - `memory/`: Design notes, plans, prior analyses—read-only reference.
+
+## Reports & Outputs（不含检验/审计类）
+- HTML 报告（`baogao/baogao/`）：`单因子分析_*.html`、`带参数的单因子分析（10等分）_*.html`、`带参数的单因子自由区间挖掘_*.html`、`带参数的双因子自由区间挖掘_*.html`、`双因子分析_*.html`。
+- 表格类（`baogao/biaoge/`）：`因子分析汇总_*.csv`、`带参数的单因子分析（10等分）_数据_*.xlsx`、`带参数单因子自由区间挖掘_汇总/数据_*.{csv,xlsx}`、`带参数的双因子自由区间挖掘_汇总/数据_*.{csv,xlsx}`、`双因子分析_汇总/数据_*.{csv,xlsx}`。
+- 日志/审计/校验产物放 `baogao/jianyan/`（含 `factor_analysis_log_*.txt`、`log_metrics.csv` 等），不属于常规报告。
 
 ## Build, Test, and Development Commands
 - Create env and install deps (Python 3.9+ recommended):
@@ -79,7 +87,7 @@
 - 带参数双因子排行榜：协同增益需 >20% 方可入榜；样本下限 500；样本计分恢复为按样本分位线性插值（与其他指标一致，不对 <500 额外扣分）；展示行数为 `max_rank_display` 的两倍（默认 40 行）。
 
 ## Testing Guidelines
-- No formal automated tests yet; validate by running the pipeline on a small Excel sample in `shuju/biaoge/`, then confirm new rows in `baogao/log_metrics.csv` and generated HTML/CSV/Excel reports.
+- No formal automated tests yet; validate by running the pipeline on a small Excel sample in `shuju/biaoge/`, then confirm new rows in `baogao/jianyan/log_metrics.csv` and generated HTML/CSV/Excel reports.
 - For numerical changes, spot-check IC/IR outputs and classification summaries; compare to prior artifacts in `baogao/`.
 - If adding new helpers, consider lightweight `assert` checks or a small `pytest` module under `yinzifenxi/` for regressions.
 

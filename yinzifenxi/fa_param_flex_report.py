@@ -17,6 +17,7 @@ from .fa_report_utils import (
     render_table,
     render_alert,
     render_text_block,
+    render_report_notes,
 )
 
 
@@ -119,7 +120,8 @@ def generate_single_param_flex_reports(results: List[Dict[str, Any]], report_opt
     output_dir = report_options.get("output_dir") or os.path.join(os.getcwd(), "baogao")
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    prefix = "带参数单因子自由区间挖掘"
+    # 按需求重命名：带参数的单因子自由区间挖掘 + 时间戳（去掉“分析”字样）
+    prefix = "带参数的单因子自由区间挖掘"
 
     # CSV / Excel
     csv_path = os.path.join(output_dir, f"{prefix}_汇总_{timestamp}.csv")
@@ -127,7 +129,7 @@ def generate_single_param_flex_reports(results: List[Dict[str, Any]], report_opt
     excel_path = os.path.join(output_dir, f"{prefix}_数据_{timestamp}.xlsx")
     scored.to_excel(excel_path, index=False)
 
-    html_path = os.path.join(output_dir, f"{prefix}_分析_{timestamp}.html")
+    html_path = os.path.join(output_dir, f"{prefix}_{timestamp}.html")
     html_content = _build_html(scored, full_view, dedup_view, report_options, timestamp)
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html_content)
@@ -143,14 +145,28 @@ def _build_html(scored, full_view, dedup_view, report_options, timestamp):
     top_n = int(report_options.get("report_top_n", 20) or 20)
     min_samples = report_options.get("min_samples")
     filter_stats = report_options.get("filter_stats") or {}
+    overall = report_options.get("overall_metrics") or {}
+    overall_return = overall.get("annual_return") if isinstance(overall, dict) else None
+    threshold = None
+    if overall_return is not None and not pd.isna(overall_return):
+        threshold = overall_return * 1.2
     bin_strategy = report_options.get("bin_strategy", "quantile")
 
     cards = render_metric_cards(
         [
             ("有效区间数", str(len(scored))),
-            ("平均年化收益", _fmt_percent(scored["annual_return"].mean(), 2)),
-            ("平均夏普比率", _fmt_float(scored["sharpe"].mean(), 3)),
-            ("平均最大回撤", _fmt_percent(scored["max_drawdown"].mean(), 1)),
+            (
+                "整体年化收益率(全样本)",
+                _fmt_percent(overall.get("annual_return"), 2)
+                if overall
+                else _fmt_percent(scored["annual_return"].mean(), 2),
+            ),
+            (
+                "整体最大回撤(全样本)",
+                _fmt_percent(overall.get("max_drawdown"), 1)
+                if overall
+                else _fmt_percent(scored["max_drawdown"].mean(), 1),
+            ),
             ("样本中位数", _fmt_float(scored["samples"].median(), 1)),
         ]
     )
@@ -166,8 +182,18 @@ def _build_html(scored, full_view, dedup_view, report_options, timestamp):
         builder.add_section("排行榜", render_alert("暂无满足条件的区间"))
         return builder.build()
 
+    def _apply_threshold(df: pd.DataFrame) -> pd.DataFrame:
+        if threshold is None:
+            return df
+        return df[df["annual_return"] > threshold]
+
     def _render_table(df):
-        display = df.head(top_n * 2).copy()
+        base = _apply_threshold(df)
+        user_rows = df[df.get("is_user_range", False)]
+        # 合并后去重，保证用户区间始终展示
+        merged = pd.concat([base, user_rows], ignore_index=True)
+        merged = merged.drop_duplicates(subset=["factor", "range_display"])
+        display = merged.head(top_n * 2).copy()
         if display.empty:
             return render_alert("暂无满足条件的区间")
         cols = [
@@ -175,7 +201,7 @@ def _build_html(scored, full_view, dedup_view, report_options, timestamp):
             "range_display",
             "composite_score",
             "annual_return",
-            "sharpe",
+            "avg_return",
             "max_drawdown",
             "samples",
             "trade_days",
@@ -189,24 +215,67 @@ def _build_html(scored, full_view, dedup_view, report_options, timestamp):
                 "range_display": "区间",
                 "composite_score": "综合得分",
                 "annual_return": "年化收益率",
-                "sharpe": "夏普比率",
+                "avg_return": "平均每笔交易收益率",
                 "max_drawdown": "最大回撤",
                 "samples": "样本数量",
                 "trade_days": "交易日数",
                 "data_years": "数据年份",
-                "is_user_range": "用户区间",
             }
         )
+        # 行样式：用户区间标黄
+        row_classes = {}
+        is_user_flags = display["is_user_range"].copy()
+        display = display.drop(columns=["is_user_range"])
+        display = display[
+            [
+                "因子",
+                "区间",
+                "综合得分",
+                "年化收益率",
+                "平均每笔交易收益率",
+                "最大回撤",
+                "样本数量",
+                "交易日数",
+                "数据年份",
+            ]
+        ]
+        for idx, is_user in is_user_flags.items():
+            if bool(is_user):
+                row_classes[idx] = "highlight-yellow"
+        # 标记各数值列的前三名为蓝色背景
+        metric_columns = {
+            "综合得分": False,    # 越大越好
+            "年化收益率": False,  # 越大越好
+            "平均每笔交易收益率": False,  # 越大越好
+            "最大回撤": True,     # 越小越好
+        }
+        cell_classes = {}
+        for col, ascending in metric_columns.items():
+            if col not in display.columns:
+                continue
+            top_idx = (
+                display[col]
+                .dropna()
+                .sort_values(ascending=ascending)
+                .index[:3]
+            )
+            for idx in top_idx:
+                cell_classes.setdefault(idx, {})[col] = "highlight-blue"
         formatters = {
             "综合得分": _fmt_float,
             "年化收益率": lambda v: _fmt_percent(v, 2),
-            "夏普比率": _fmt_float,
+            "平均每笔交易收益率": lambda v: _fmt_percent(v, 2),
             "最大回撤": lambda v: _fmt_percent(v, 1),
             "样本数量": lambda v: str(int(v)) if pd.notna(v) else "--",
             "交易日数": lambda v: str(int(v)) if pd.notna(v) else "--",
-            "用户区间": lambda v: "是" if v else "",
         }
-        return render_table(display, list(display.columns), formatters=formatters)
+        return render_table(
+            display,
+            list(display.columns),
+            formatters=formatters,
+            cell_classes=cell_classes,
+            row_classes=row_classes,
+        )
 
     builder.add_section("排行榜（全量区间）", _render_table(full_view))
     builder.add_section("排行榜（按因子去重）", _render_table(dedup_view))
@@ -216,5 +285,7 @@ def _build_html(scored, full_view, dedup_view, report_options, timestamp):
         builder.add_section("用户区间", render_alert("暂无用户指定区间或无区间满足样本下限。", level="info"))
     else:
         builder.add_section("用户区间", _render_table(user_view))
+
+    builder.add_section("报告说明", render_report_notes())
 
     return builder.render()

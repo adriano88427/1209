@@ -463,31 +463,9 @@ class ParameterizedFactorAnalyzer:
                 if observation_days and observation_days > 0:
                     observation_years = max(observation_days / 252, 1 / 252)
 
-                annualization_method = "CAGR"
-                annualized_return = np.nan
-                if trade_days > 0 and pd.notna(observation_years) and observation_years > 0:
-                    clipped_returns = daily_returns_series.clip(lower=-0.99)
-                    try:
-                        total_return = float(np.prod(1 + clipped_returns.values) - 1)
-                    except Exception:
-                        total_return = np.nan
-                    final_value = 1 + (total_return if not pd.isna(total_return) else 0)
-                    if pd.notna(total_return) and final_value > 0:
-                        try:
-                            annualized_return = final_value ** (1 / observation_years) - 1
-                        except Exception:
-                            annualization_method = "LinearFallback"
-                            annualized_return = (
-                                daily_mean * 252 if pd.notna(daily_mean) else np.nan
-                            )
-                    else:
-                        annualization_method = "LinearFallback"
-                        annualized_return = (
-                            daily_mean * 252 if pd.notna(daily_mean) else np.nan
-                        )
-                else:
-                    annualization_method = "LinearFallback"
-                    annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
+                # 统一口径：使用日均收益 * 252 的线性年化（与自由区间榜单一致，不做复利）
+                annualization_method = "Linear252"
+                annualized_return = daily_mean * 252 if pd.notna(daily_mean) else np.nan
 
                 if pd.notna(daily_std) and daily_std > 0:
                     annualized_std = daily_std * np.sqrt(252)

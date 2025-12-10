@@ -36,11 +36,15 @@ from yinzifenxi.fa_config import (
     DEFAULT_DATA_FILE,
     DEFAULT_DATA_FILES,
     ANALYSIS_SWITCHES,
+    SINGLE_PARAM_FLEX_SETTINGS,
     DUAL_FACTOR_SETTINGS,
     DUAL_REPORT_OPTIONS,
     AUX_ANALYSIS_OPTIONS,
+    REPORT_OUTPUT_DIR,
+    validate_single_param_flex_config,
     validate_dual_config,
 )
+import shutil
 from yinzifenxi.fa_logging import Logger as ExternalLogger, detect_debug_enabled
 from yinzifenxi.fa_nonparam_analysis import (
     FactorAnalysis,
@@ -72,8 +76,52 @@ try:
     from yinzifenxi.fa_dual_param_analysis import run_dual_param_pipeline
 except ImportError:  # pragma: no cover
     run_dual_param_pipeline = None
+try:
+    from yinzifenxi.fa_param_flex_analysis import run_single_param_flex
+except ImportError:  # pragma: no cover
+    run_single_param_flex = None
 
-LOG_METRICS_FILE = os.path.join("baogao", "log_metrics.csv")
+LOG_METRICS_FILE = os.path.join("baogao", "jianyan", "log_metrics.csv")
+REPORT_HTML_DIR = os.path.join(REPORT_OUTPUT_DIR, "baogao")
+REPORT_TABLE_DIR = os.path.join(REPORT_OUTPUT_DIR, "biaoge")
+REPORT_AUDIT_DIR = os.path.join(REPORT_OUTPUT_DIR, "jianyan")
+
+
+def _ensure_report_subdirs():
+    """确保报告分类目录存在。"""
+    for path in (REPORT_OUTPUT_DIR, REPORT_HTML_DIR, REPORT_TABLE_DIR, REPORT_AUDIT_DIR):
+        os.makedirs(path, exist_ok=True)
+
+
+def _organize_report_outputs():
+    """将生成的报告按类型分类到 baogao/ 下的子目录。"""
+    _ensure_report_subdirs()
+    base = REPORT_OUTPUT_DIR
+    try:
+        entries = os.listdir(base)
+    except FileNotFoundError:
+        print(f"[WARN] Output directory not found: {base}")
+        return
+
+    for entry in entries:
+        src = os.path.join(base, entry)
+        if not os.path.isfile(src):
+            continue
+        ext = os.path.splitext(entry)[1].lower()
+        if ext in (".html", ".htm"):
+            dest_dir = REPORT_HTML_DIR
+        elif ext in (".csv", ".xlsx", ".xls"):
+            dest_dir = REPORT_TABLE_DIR
+        elif ext in (".log", ".txt"):
+            dest_dir = REPORT_AUDIT_DIR
+        else:
+            continue
+        dest = os.path.join(dest_dir, entry)
+        try:
+            shutil.move(src, dest)
+            print(f"[INFO] Moved output to {dest}")
+        except Exception as move_err:
+            print(f"[WARN] Failed to move {src} -> {dest}: {move_err}")
 
 # 读取完整因子数据文件
 configured_files = list(DEFAULT_DATA_FILES) if DEFAULT_DATA_FILES else []
@@ -420,7 +468,9 @@ def main(argv=None):
     param_stage_start = time.perf_counter()
     try:
         parameterized_analyzer = ParameterizedFactorAnalyzer(analyzer.data.copy())
+        print("[DEBUG] Parameterized analyzer created.")
         if parameterized_analyzer.preprocess_data():
+            print("[DEBUG] Parameterized preprocess OK.")
             report_filename = parameterized_analyzer.generate_parameterized_report()
             if report_filename:
                 print(f"[OK] Parameterized factor HTML report generated: {report_filename}")
@@ -446,9 +496,27 @@ def main(argv=None):
     dual_config = validate_dual_config()
     _run_dual_nonparam_workflow(analyzer, dual_config, logger)
     if parameterized_analyzer is not None:
+        # 单因子自由区间挖掘（可选）
+        if ANALYSIS_SWITCHES.get("single_param_flex") and run_single_param_flex:
+            print("\n[INFO] === 单因子自由区间自由挖掘 ===")
+            flex_cfg = validate_single_param_flex_config(SINGLE_PARAM_FLEX_SETTINGS)
+            flex_report_options = _with_logger_metadata(DUAL_REPORT_OPTIONS, logger)
+            try:
+                flex_outputs = run_single_param_flex(parameterized_analyzer, flex_cfg, flex_report_options)
+                if flex_outputs:
+                    print(f"[OK][FLEX] CSV: {flex_outputs.get('csv_path')}")
+                    print(f"[OK][FLEX] Excel: {flex_outputs.get('excel_path')}")
+                    print(f"[OK][FLEX] HTML: {flex_outputs.get('html_path')}")
+                    _record_run_metrics("single_param_flex", flex_outputs, flex_report_options)
+            except Exception as exc:
+                print(f"[ERROR][FLEX] 单因子自由区间挖掘失败: {exc}")
+
         _run_dual_param_workflow(parameterized_analyzer, dual_config, logger)
     else:
         print("[WARN] Parameterized factor data unavailable; skipping dual-factor parametric analysis")
+
+    # 按文件类型整理输出目录，HTML -> baogao/baogao，表格 -> baogao/biaoge，日志/审计 -> baogao/jianyan。
+    _organize_report_outputs()
 
     total_elapsed = time.perf_counter() - overall_start
     print("\n[INFO] Factor analysis program completed")
@@ -472,7 +540,7 @@ def _with_logger_metadata(base_options, logger):
 
 
 def _record_run_metrics(pipeline_name: str, outputs: Dict[str, Any], report_options: Dict[str, Any]):
-    """将双因子运行结果追加记录到 baogao/log_metrics.csv。"""
+    """将运行结果追加记录到 baogao/jianyan/log_metrics.csv。"""
     if not outputs:
         return
     try:

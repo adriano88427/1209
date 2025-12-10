@@ -16,6 +16,7 @@ from .fa_report_utils import (
     render_metric_cards,
     render_table,
     render_alert,
+    render_report_notes,
 )
 
 
@@ -23,7 +24,7 @@ def generate_dual_nonparam_reports(results: List[Dict], report_options: Dict[str
     """生成 CSV 和 HTML 报告，返回路径。"""
     output_dir = report_options.get("output_dir")
     os.makedirs(output_dir, exist_ok=True)
-    prefix = report_options.get("nonparam_prefix", "双因子非参数")
+    prefix = report_options.get("nonparam_prefix", "双因子分析")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     summaries = [item["summary"] for item in results]
@@ -32,7 +33,7 @@ def generate_dual_nonparam_reports(results: List[Dict], report_options: Dict[str
     csv_path = os.path.join(output_dir, csv_name)
     summary_df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
-    html_name = f"{prefix}分析_{timestamp}.html"
+    html_name = f"{prefix}_{timestamp}.html"
     html_path = os.path.join(output_dir, html_name)
     html_content = _build_html_report(summary_df, results, report_options, timestamp)
     with open(html_path, "w", encoding="utf-8") as f:
@@ -112,5 +113,7 @@ def _build_html_report(
                 )
         if heatmap_sections:
             builder.add_section("典型热力图", "".join(heatmap_sections))
+
+    builder.add_section("报告说明", render_report_notes())
 
     return builder.render()

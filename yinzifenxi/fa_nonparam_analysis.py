@@ -272,44 +272,21 @@ class FactorAnalysis:
             # 使用分组平均收益作为持股周期收益率
             period_total_returns = avg_returns['平均收益']
             
-            # 步骤2: 应用标准复利年化方法（主要方法）
-            print(f"    [统计] 应用标准复利年化方法...")
-            standard_annual_returns = []
+            # 步骤2: 统一线性年化口径（日均收益 * 252）
+            print("    [统计] 应用线性年化（均值×252，不做复利）...")
             validation_results = []
-            
-            for i, total_return in enumerate(period_total_returns):
-                # 修复4: 使用安全版本的年化计算函数，防止类型错误
-                annual_return, _ = safe_calculate_annual_return(total_return, observation_years)
-                standard_annual_returns.append(annual_return)
-                
-                # 验证计算结果的正确性
-                validation = validate_annual_return_calculation(annual_return, observation_years, total_return)
+            daily_avg_returns = period_total_returns / holding_period
+            standard_annual_returns = daily_avg_returns * 252
+            cagr_annual_returns = standard_annual_returns.copy()
+            for i, ann_ret in enumerate(standard_annual_returns):
+                # 线性年化简单校验：只要是有限值即可视为有效
+                validation = {'valid': np.isfinite(ann_ret)}
                 validation_results.append(validation)
-                
-                # 输出验证结果（前3组详细显示）
-                if i < 3 and validation['valid']:
-                    print(f"      组{i+1}: 总收益{total_return:.4f} -> 年化{annual_return:.4f} ({annual_return*100:.2f}%)")
-                elif i < 3:
-                    print(f"      组{i+1}: 验证失败 - {validation.get('error', '未知错误')}")
-            
-            # 转换为numpy数组
-            standard_annual_returns = np.array(standard_annual_returns)
-            
-            # 步骤3: 计算CAGR复合年化（对比方法）
-            print(f"    [上升] 计算CAGR复合年化（对比方法）...")
-            cagr_annual_returns = []
-            
-            for total_return in period_total_returns:
-                # 修复4: 使用安全版本的年化计算函数，防止类型错误
-                # CAGR计算：(1 + 总收益率)^(1/年数) - 1
-                # 这与标准复利年化是相同的数学公式
-                cagr_return, _ = safe_calculate_annual_return(total_return, observation_years)
-                cagr_annual_returns.append(cagr_return)
-            
-            cagr_annual_returns = np.array(cagr_annual_returns)
-            
-            # 步骤4: 移除线性年化方法（方法A/B）
-            # 不再计算传统的线性年化收益率
+                if i < 3:
+                    if validation['valid']:
+                        print(f"      组{i+1}: 线性年化 {ann_ret:.4f} ({ann_ret*100:.2f}%)")
+                    else:
+                        print("      组{i+1}: 年化结果无效，值为 NaN/Inf")
             
             # 步骤5: 计算年化风险指标
             print(f"    [下降] 计算年化风险指标...")

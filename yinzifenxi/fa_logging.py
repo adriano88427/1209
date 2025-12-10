@@ -4,7 +4,7 @@ import sys
 import re
 from datetime import datetime
 
-from .fa_config import build_report_path
+from .fa_config import REPORT_AUDIT_DIR
 
 try:  # 可选依赖，仅用于中文转拼音，缺失时回退为 unicode 转义
     from pypinyin import lazy_pinyin  # type: ignore
@@ -179,9 +179,14 @@ class Logger:
         """
         if log_file is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            log_file = f'factor_analysis_log_{timestamp}.txt'
+            log_file = os.path.join(REPORT_AUDIT_DIR, f'factor_analysis_log_{timestamp}.txt')
+        else:
+            # 相对路径统一写入检验目录，绝对路径保持不变
+            if not os.path.isabs(log_file):
+                log_file = os.path.join(REPORT_AUDIT_DIR, log_file)
 
-        log_file = build_report_path(log_file)
+        log_file = os.path.abspath(log_file)
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
         self.log_file = log_file
         self.terminal = sys.stdout  # 保存原始终端输出

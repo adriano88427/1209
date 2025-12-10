@@ -6,6 +6,8 @@ import copy
 import os
 from typing import Dict, Any, List, Tuple
 
+# 年化收益率统一口径：全系统使用“日均收益 × 252”线性年化（不做复利），无配置开关，保持与各报告/榜单一致。
+
 # ============================================================
 # 分析开关：用于控制哪些分析模块会被执行。
 # - single_nonparam / single_param 默认为 True，保持原有行为。
@@ -14,6 +16,7 @@ from typing import Dict, Any, List, Tuple
 ANALYSIS_SWITCHES: Dict[str, bool] = {
     "single_nonparam": True,  # 单因子-非参数分析
     "single_param": True,     # 单因子-带参数分析
+    "single_param_flex": True,  # 单因子-自由区间挖掘（新增）
     "dual_nonparam": True,    # 双因子-非参数分析（在此处切换，无需环境变量）
     "dual_param": True,       # 双因子-带参数分析（在此处切换，无需环境变量）
 }
@@ -26,6 +29,12 @@ REPORT_OUTPUT_DIR = os.path.abspath(os.path.join(_BASE_DIR, "..", "baogao"))
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(DATA_TABLE_DIR, exist_ok=True)
 os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
+# 报告分类目录（HTML/表格/检验）
+REPORT_HTML_DIR = os.path.join(REPORT_OUTPUT_DIR, "baogao")
+REPORT_TABLE_DIR = os.path.join(REPORT_OUTPUT_DIR, "biaoge")
+REPORT_AUDIT_DIR = os.path.join(REPORT_OUTPUT_DIR, "jianyan")
+for _dir in (REPORT_HTML_DIR, REPORT_TABLE_DIR, REPORT_AUDIT_DIR):
+    os.makedirs(_dir, exist_ok=True)
 
 # =============================
 # 用户可配置项（统一集中管理）
@@ -320,7 +329,8 @@ else:
     _RESOLVED_NEUTRAL_RULES = copy.deepcopy(FACTOR_NEUTRALIZATION_RULES)
 
 NEUTRALIZATION_CONFIG: Dict[str, Any] = {
-    "enabled": _env_flag("FA_NEUTRALIZATION_ENABLED", True),
+    # 默认关闭中性化以加快运行，如需开启请将环境变量 FA_NEUTRALIZATION_ENABLED 设为 1
+    "enabled": _env_flag("FA_NEUTRALIZATION_ENABLED", False),
     "signal_date_column": os.getenv("FA_NEUTRAL_SIGNAL_COLUMN", "信号日期") or "信号日期",
     "market_cap_column": os.getenv("FA_NEUTRAL_MCAP_COLUMN", "流通市值(元)") or "流通市值(元)",
     "industry_column": os.getenv("FA_NEUTRAL_INDUSTRY_COLUMN", "所属同花顺行业") or "所属同花顺行业",
@@ -340,6 +350,54 @@ NEUTRALIZATION_CONFIG: Dict[str, Any] = {
 }
 
 # =============================
+# 单因子自由区间挖掘配置（新增）
+# =============================
+SINGLE_PARAM_FLEX_SETTINGS: Dict[str, Any] = {
+    # 样本下限模式：auto 按总样本/20，自适应；fixed 使用 min_samples_fixed
+    "min_samples_mode": os.getenv("FA_FLEX_MIN_SAMPLES_MODE", "auto"),
+    "min_samples_fixed": max(1, _env_int("FA_FLEX_MIN_SAMPLES_FIXED", 500)),
+    # 分档设置：多粒度分位/等距 + 滑窗
+    "quantile_bins": _env_csv_numbers("FA_FLEX_QUANTILE_BINS", int) or [8, 12, 16, 20],
+    "equal_bins": _env_csv_numbers("FA_FLEX_EQUAL_BINS", int) or [8, 12],
+    "sliding_windows": _env_csv_numbers("FA_FLEX_SLIDING_WINDOWS", float) or [0.05, 0.10, 0.20],  # 宽度比例，步长=宽度/2
+    # 每个因子最多保留的区间数（仅非用户区间）
+    "max_ranges_per_factor": max(1, _env_int("FA_FLEX_MAX_RANGES", 50)),
+    # 是否允许用户自定义区间
+    "enable_user_ranges": _env_flag("FA_FLEX_ENABLE_USER_RANGES", True),
+    # 用户自定义区间，格式 {因子名: [(low, high), ...]}
+    # 示例：机构持股比例(%) 在 0%~13.31%
+    "user_ranges": {
+        "机构持股比例(%)": [(0.0, 0.1331)],
+    },
+    # 榜单默认展示的 top N
+    "report_top_n": max(1, _env_int("FA_FLEX_REPORT_TOP_N", 20)),
+    # 是否导出全量候选（过滤样本下限但不截断）
+    "export_all": _env_flag("FA_FLEX_EXPORT_ALL", True),
+}
+
+
+def validate_single_param_flex_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """校验/填充自由区间挖掘配置。"""
+    base = dict(SINGLE_PARAM_FLEX_SETTINGS)
+    cfg = cfg or {}
+    base.update({k: v for k, v in cfg.items() if v is not None})
+    # 纠正基本类型
+    base["min_samples_mode"] = str(base.get("min_samples_mode", "auto")).strip().lower() or "auto"
+    base["min_samples_fixed"] = max(1, int(base.get("min_samples_fixed", 500)))
+    # 分档/滑窗参数
+    base["quantile_bins"] = [int(x) for x in base.get("quantile_bins", [8, 12, 16, 20]) if x]
+    base["equal_bins"] = [int(x) for x in base.get("equal_bins", [8, 12]) if x]
+    base["sliding_windows"] = [float(x) for x in base.get("sliding_windows", [0.05, 0.10, 0.20]) if x]
+    base["max_ranges_per_factor"] = max(1, int(base.get("max_ranges_per_factor", 50)))
+    base["enable_user_ranges"] = bool(base.get("enable_user_ranges", True))
+    base["report_top_n"] = max(1, int(base.get("report_top_n", 20)))
+    base["export_all"] = bool(base.get("export_all", False))
+    # user_ranges 保持原样（应为 dict）
+    if not isinstance(base.get("user_ranges"), dict):
+        base["user_ranges"] = {}
+    return base
+
+# =============================
 # 双因子分析配置
 # =============================
 
@@ -357,8 +415,8 @@ DUAL_FACTOR_SETTINGS: Dict[str, Any] = {
 }
 
 DUAL_REPORT_OPTIONS: Dict[str, Any] = {
-    "nonparam_prefix": "双因子非参数",
-    "param_prefix": "双因子带参数",
+    "nonparam_prefix": "双因子分析",
+    "param_prefix": "带参数的双因子自由区间挖掘",
     "output_dir": os.getenv("FA_DUAL_OUTPUT_DIR", REPORT_OUTPUT_DIR),
     "heatmap_enabled": True,
     "max_rank_display": 10,
@@ -458,7 +516,8 @@ _AUX_FAST_SAMPLES: Tuple[float, ...] = tuple(
 )
 
 AUX_ANALYSIS_OPTIONS: Dict[str, Any] = {
-    "enabled": _env_flag("FA_AUX_ENABLED", True),
+    # 默认关闭辅助分析以降低耗时，如需开启请将环境变量 FA_AUX_ENABLED 设为 1
+    "enabled": _env_flag("FA_AUX_ENABLED", False),
     "mode": os.getenv("FA_AUX_MODE", "full") or "full",
     "window_sizes": _AUX_WINDOW_SIZES,
     "sample_sizes": _AUX_SAMPLE_SIZES,
@@ -468,7 +527,7 @@ AUX_ANALYSIS_OPTIONS: Dict[str, Any] = {
     "cache_enabled": _env_flag("FA_AUX_CACHE_ENABLED", False),
     "cache_dir": os.getenv(
         "FA_AUX_CACHE_DIR",
-        os.path.join(REPORT_OUTPUT_DIR, "cache", "auxiliary"),
+        os.path.join(REPORT_OUTPUT_DIR, "jianyan", "cache", "auxiliary"),
     ),
     "fast_mode_overrides": {
         "window_sizes": _AUX_FAST_WINDOWS,

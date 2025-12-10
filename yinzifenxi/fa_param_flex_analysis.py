@@ -50,6 +50,7 @@ def _calc_metrics(df: pd.DataFrame, return_col: str) -> Dict[str, Any]:
     max_dd = calc_max_drawdown(returns)
     return {
         "annual_return": annual_return,
+        "avg_return": float(daily_mean) if pd.notna(daily_mean) else np.nan,
         "sharpe": sharpe,
         "max_drawdown": float(max_dd) if max_dd is not None else np.nan,
         "samples": len(returns),
@@ -75,11 +76,15 @@ def _build_intervals(series: pd.Series, bins: int, strategy: str) -> List[pd.Int
     return intervals
 
 
-def _format_interval(interval: pd.Interval) -> str:
+def _format_interval(interval: pd.Interval, as_percent: bool = True) -> str:
     if pd.isna(interval):
         return "--"
-    left = f"{interval.left:.4f}" if isinstance(interval.left, (int, float)) else str(interval.left)
-    right = f"{interval.right:.4f}" if isinstance(interval.right, (int, float)) else str(interval.right)
+    def _fmt(x):
+        if not isinstance(x, (int, float)):
+            return str(x)
+        return f"{x*100:.2f}%" if as_percent else f"{x:.4f}"
+    left = _fmt(interval.left)
+    right = _fmt(interval.right)
     return f"[{left}, {right}]"
 
 
@@ -101,6 +106,7 @@ def run_single_param_flex(parameterized_analyzer, flex_config: Dict[str, Any], r
     total_samples = len(df)
     min_samples = _compute_min_samples(cfg, total_samples)
     print(f"[FLEX] 总样本 {total_samples}，样本下限 {min_samples}（mode={cfg.get('min_samples_mode','auto')}）")
+    overall_metrics = _calc_metrics(df, RETURN_COLUMN)
 
     factors = getattr(parameterized_analyzer, "factors", [])
     if not factors:
@@ -143,7 +149,7 @@ def run_single_param_flex(parameterized_analyzer, flex_config: Dict[str, Any], r
         intervals = _build_intervals(nonzero, default_bins, bin_strategy)
         for interval in intervals:
             idx = nonzero[(nonzero >= interval.left) & (nonzero <= interval.right)].index
-            ranges.append((_format_interval(interval), idx, False))
+            ranges.append((_format_interval(interval, as_percent=True), idx, False))
 
         # 用户区间
         if enable_user and factor in user_ranges:
@@ -152,28 +158,32 @@ def run_single_param_flex(parameterized_analyzer, flex_config: Dict[str, Any], r
                     continue
                 low, high = rng
                 idx = factor_series[(factor_series >= low) & (factor_series <= high)].index
-                label = f"[{low},{high}]"
+                label = f"[{low*100:.2f}%,{high*100:.2f}%]"
                 ranges.append((label, idx, True))
 
         # 去重并截断上限
         dedup = []
         seen = set()
+        non_user_count = 0
         for label, idx, is_user in ranges:
             if not len(idx):
                 continue
             key = (label, is_user)
             if key in seen:
                 continue
+            # 非用户区间受 max_ranges 限制，用户区间不受限制
+            if (not is_user) and non_user_count >= max_ranges:
+                continue
             seen.add(key)
             dedup.append((label, idx, is_user))
-            if len(dedup) >= max_ranges:
-                break
+            if not is_user:
+                non_user_count += 1
 
         for label, idx, is_user in dedup:
             subset = df.loc[idx]
             samples = len(subset)
             filter_stats["total_ranges"] += 1
-            if samples < min_samples:
+            if (samples < min_samples) and (not is_user):
                 filter_stats["low_sample"] += 1
                 continue
 
@@ -191,6 +201,7 @@ def run_single_param_flex(parameterized_analyzer, flex_config: Dict[str, Any], r
                     "factor": factor,
                     "range_display": label,
                     "annual_return": metrics["annual_return"],
+                    "avg_return": metrics.get("avg_return"),
                     "sharpe": metrics["sharpe"],
                     "max_drawdown": metrics["max_drawdown"],
                     "samples": samples,
@@ -207,8 +218,10 @@ def run_single_param_flex(parameterized_analyzer, flex_config: Dict[str, Any], r
     report_opts = report_options.copy() if report_options else {}
     report_opts.setdefault("report_top_n", cfg.get("report_top_n", 20))
     report_opts.setdefault("bin_strategy", bin_strategy)
+    report_opts["default_bins"] = default_bins
     report_opts["min_samples"] = min_samples
     report_opts["filter_stats"] = filter_stats
+    report_opts["overall_metrics"] = overall_metrics
     duration = time.perf_counter() - start
     paths = generate_single_param_flex_reports(results, report_opts)
     paths["duration_sec"] = duration

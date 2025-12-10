@@ -18,6 +18,7 @@ from .fa_report_utils import (
     render_metric_cards,
     render_table,
     render_alert,
+    render_report_notes,
 )
 
 
@@ -48,7 +49,7 @@ def _format_detail_grid(grid: pd.DataFrame) -> pd.DataFrame:
 def generate_dual_param_reports(results: List[Dict], report_options: Dict[str, any]) -> Dict[str, str]:
     output_dir = report_options.get("output_dir")
     os.makedirs(output_dir, exist_ok=True)
-    prefix = report_options.get("param_prefix", "双因子带参数")
+    prefix = report_options.get("param_prefix", "带参数的双因子自由区间挖掘")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     summaries = [item["summary"] for item in results]
@@ -57,7 +58,7 @@ def generate_dual_param_reports(results: List[Dict], report_options: Dict[str, a
     csv_path = os.path.join(output_dir, csv_name)
     summary_df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
-    html_name = f"{prefix}分析_{timestamp}.html"
+    html_name = f"{prefix}_{timestamp}.html"
     html_path = os.path.join(output_dir, html_name)
     html_content = _build_html(summary_df, results, timestamp, report_options)
     with open(html_path, "w", encoding="utf-8") as f:
@@ -296,6 +297,8 @@ def _build_html(
         )
     if detail_sections:
         builder.add_section("部分区间详情", "".join(detail_sections))
+
+    builder.add_section("报告说明", render_report_notes())
 
     return builder.render()
 
